@@ -119,16 +119,14 @@ function init(){
     });
 
     // Pinch-to-zoom
-    let initialPinchDist = 0;
-    let initialZoom = 1;
+    let lastPinchDist = 0;
 
     document.addEventListener('touchstart', e => {
         if(!frozen && e.touches.length === 2 && !zoomSlider.disabled) {
-            initialPinchDist = Math.hypot(
+            lastPinchDist = Math.hypot(
                 e.touches[0].clientX - e.touches[1].clientX,
                 e.touches[0].clientY - e.touches[1].clientY
             );
-            initialZoom = parseFloat(zoomSlider.value) || 1;
         }
     }, {passive: false});
 
@@ -139,14 +137,20 @@ function init(){
                 e.touches[0].clientX - e.touches[1].clientX,
                 e.touches[0].clientY - e.touches[1].clientY
             );
-            if(initialPinchDist > 0) {
-                const scale = currentDist / initialPinchDist;
-                let newZoom = initialZoom * scale;
-                const minZ = parseFloat(zoomSlider.min) || 1;
+            if(lastPinchDist > 0) {
+                const delta = currentDist - lastPinchDist;
                 const maxZ = parseFloat(zoomSlider.max) || 10;
+                const minZ = parseFloat(zoomSlider.min) || 1;
+                
+                // Sensitivity: 300 pixels movement = full range
+                const sensitivity = (maxZ - minZ) / 300; 
+                let newZoom = parseFloat(zoomSlider.value) + (delta * sensitivity);
+                
                 newZoom = Math.max(minZ, Math.min(newZoom, maxZ));
                 zoomSlider.value = newZoom;
                 onZoom();
+                
+                lastPinchDist = currentDist;
             }
         }
     }, {passive: false});
@@ -295,10 +299,29 @@ async function switchLens(lens){
     if(stream){if(frozen) unfreeze(); stopCam(); await startCam();}
 }
 
+let lastZoomTime = 0;
+let zoomPending = false;
+
 function onZoom(){
     if(!track) return;
-    try{track.applyConstraints({advanced:[{zoom:parseFloat(zoomSlider.value)}]});}catch(_){}
     updZoomLbl();
+    
+    const now = Date.now();
+    const limit = 50;
+    if (now - lastZoomTime > limit) {
+        lastZoomTime = now;
+        try{track.applyConstraints({advanced:[{zoom:parseFloat(zoomSlider.value)}]});}catch(_){}
+        zoomPending = false;
+    } else if (!zoomPending) {
+        zoomPending = true;
+        setTimeout(() => {
+            if (zoomPending) {
+                lastZoomTime = Date.now();
+                zoomPending = false;
+                try{track.applyConstraints({advanced:[{zoom:parseFloat(zoomSlider.value)}]});}catch(_){}
+            }
+        }, limit - (now - lastZoomTime));
+    }
 }
 function updZoomLbl(){
     const v=parseFloat(zoomSlider.value);
