@@ -61,8 +61,9 @@ let allDevices=[], hasMultiCam=false;
 
 // Drawing
 let dColor='#ff3b30', dSize=3, isEraser=false, drawing=false;
-let points=[];  // collected points for smooth curves
-let lx=0, ly=0, dHistory=[];
+let paths=[];
+let currentPath=null;
+let dHistory=[];
 
 // Settings
 let recSettings={
@@ -116,6 +117,39 @@ function init(){
         if(now-lastTap<300){e.preventDefault(); toggleUI();}
         lastTap=now;
     });
+
+    // Pinch-to-zoom
+    let initialPinchDist = 0;
+    let initialZoom = 1;
+
+    document.addEventListener('touchstart', e => {
+        if(!frozen && e.touches.length === 2 && !zoomSlider.disabled) {
+            initialPinchDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            initialZoom = parseFloat(zoomSlider.value) || 1;
+        }
+    }, {passive: false});
+
+    document.addEventListener('touchmove', e => {
+        if(!frozen && e.touches.length === 2 && !zoomSlider.disabled) {
+            e.preventDefault(); 
+            const currentDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            if(initialPinchDist > 0) {
+                const scale = currentDist / initialPinchDist;
+                let newZoom = initialZoom * scale;
+                const minZ = parseFloat(zoomSlider.min) || 1;
+                const maxZ = parseFloat(zoomSlider.max) || 10;
+                newZoom = Math.max(minZ, Math.min(newZoom, maxZ));
+                zoomSlider.value = newZoom;
+                onZoom();
+            }
+        }
+    }, {passive: false});
 
     // Draw toolbar
     colorsEl.addEventListener('click', e=>{
@@ -357,7 +391,7 @@ function freeze(){
 
     frozen=true;
     freezeBtn.classList.add('f-on');
-    dHistory=[]; drawing=false;
+    dHistory=[]; paths=[]; currentPath=null; drawing=false;
 }
 
 function unfreeze(){
@@ -376,7 +410,7 @@ function unfreeze(){
     if(stream) statusText.textContent=torchOn?'الكاميرا + الفلاش':'الكاميرا مفعّلة';
     drawCtx.setTransform(1,0,0,1,0,0);
     drawCtx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
-    dHistory=[];
+    dHistory=[]; paths=[]; currentPath=null;
 }
 
 // ═══════════════════════════
@@ -389,79 +423,117 @@ function pos(e){
     return { x: e.clientX - r.left, y: e.clientY - r.top };
 }
 
-function setupBrush(){
-    if(isEraser){
-        drawCtx.globalCompositeOperation='destination-out';
-        drawCtx.strokeStyle='rgba(0,0,0,1)';
-        drawCtx.lineWidth=dSize*4;
-    }else{
-        drawCtx.globalCompositeOperation='source-over';
-        drawCtx.strokeStyle=dColor;
-        drawCtx.lineWidth=dSize;
+function redrawAll() {
+    const dpr = window.devicePixelRatio || 1;
+    drawCtx.setTransform(1,0,0,1,0,0);
+    drawCtx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
+    drawCtx.setTransform(dpr,0,0,dpr,0,0);
+
+    for(const path of paths) {
+        drawCtx.globalCompositeOperation = 'source-over';
+        drawCtx.strokeStyle = path.color;
+        drawCtx.lineWidth = path.size;
+        drawCtx.lineCap = 'round';
+        drawCtx.lineJoin = 'round';
+
+        if(path.points.length === 1) {
+            drawCtx.beginPath();
+            drawCtx.arc(path.points[0].x, path.points[0].y, path.size/2, 0, Math.PI*2);
+            drawCtx.fillStyle = path.color;
+            drawCtx.fill();
+        } else {
+            drawCtx.beginPath();
+            drawCtx.moveTo(path.points[0].x, path.points[0].y);
+            for(let i=1; i<path.points.length; i++){
+                drawCtx.lineTo(path.points[i].x, path.points[i].y);
+            }
+            drawCtx.stroke();
+        }
     }
+}
+
+function erasePathAt(p) {
+    const threshold = 15; // px
+    let erased = false;
+    for(let i=paths.length-1; i>=0; i--) {
+        const path = paths[i];
+        for(let pt of path.points) {
+            const dx = pt.x - p.x;
+            const dy = pt.y - p.y;
+            if(dx*dx + dy*dy < threshold*threshold) {
+                paths.splice(i, 1);
+                erased = true;
+                break;
+            }
+        }
+        if(erased) break;
+    }
+    if(erased) redrawAll();
+}
+
+function setupBrush(){
+    drawCtx.globalCompositeOperation='source-over';
+    drawCtx.strokeStyle = currentPath ? currentPath.color : dColor;
+    drawCtx.lineWidth = currentPath ? currentPath.size : dSize;
     drawCtx.lineCap='round';
     drawCtx.lineJoin='round';
 }
 
 function onDrawStart(e){
     if(!frozen) return;
-    drawing=true;
     const p=pos(e);
-    points=[p];
 
-    // Save state for undo (need to reset transform for getImageData)
-    const dpr = window.devicePixelRatio || 1;
-    drawCtx.setTransform(1,0,0,1,0,0);
-    dHistory.push(drawCtx.getImageData(0,0,drawCanvas.width,drawCanvas.height));
+    dHistory.push(JSON.stringify(paths));
     if(dHistory.length>50) dHistory.shift();
-    drawCtx.setTransform(dpr,0,0,dpr,0,0);
 
-    // Draw a dot at the starting point
-    setupBrush();
-    drawCtx.beginPath();
-    drawCtx.arc(p.x, p.y, (isEraser ? dSize*2 : dSize/2), 0, Math.PI*2);
-    drawCtx.fill();
+    if(isEraser) {
+        erasePathAt(p);
+        drawing = true; // allow drag to erase
+    } else {
+        drawing=true;
+        currentPath = { color: dColor, size: dSize, points: [p] };
+        paths.push(currentPath);
+
+        setupBrush();
+        drawCtx.beginPath();
+        drawCtx.arc(p.x, p.y, dSize/2, 0, Math.PI*2);
+        drawCtx.fillStyle = dColor;
+        drawCtx.fill();
+    }
 }
 
 function onDraw(e){
     if(!drawing||!frozen) return;
     const p=pos(e);
-    points.push(p);
-    setupBrush();
-
-    const len=points.length;
-    if(len < 3){
-        // Simple line for first 2 points
-        drawCtx.beginPath();
-        drawCtx.moveTo(points[len-2].x, points[len-2].y);
-        drawCtx.lineTo(p.x, p.y);
-        drawCtx.stroke();
+    if(isEraser) {
+        erasePathAt(p);
     } else {
-        // Smooth quadratic bezier through midpoints
-        const a=points[len-3];
-        const b=points[len-2];
-        const c=points[len-1];
-        const mx1=(a.x+b.x)/2, my1=(a.y+b.y)/2;
-        const mx2=(b.x+c.x)/2, my2=(b.y+c.y)/2;
-        drawCtx.beginPath();
-        drawCtx.moveTo(mx1, my1);
-        drawCtx.quadraticCurveTo(b.x, b.y, mx2, my2);
-        drawCtx.stroke();
+        currentPath.points.push(p);
+        setupBrush();
+
+        const len=currentPath.points.length;
+        if(len < 3){
+            drawCtx.beginPath();
+            drawCtx.moveTo(currentPath.points[len-2].x, currentPath.points[len-2].y);
+            drawCtx.lineTo(p.x, p.y);
+            drawCtx.stroke();
+        } else {
+            const a=currentPath.points[len-3];
+            const b=currentPath.points[len-2];
+            const c=currentPath.points[len-1];
+            const mx1=(a.x+b.x)/2, my1=(a.y+b.y)/2;
+            const mx2=(b.x+c.x)/2, my2=(b.y+c.y)/2;
+            drawCtx.beginPath();
+            drawCtx.moveTo(mx1, my1);
+            drawCtx.quadraticCurveTo(b.x, b.y, mx2, my2);
+            drawCtx.stroke();
+        }
     }
 }
 
 function onDrawEnd(){
-    if(drawing && points.length>=2){
-        setupBrush();
-        const a=points[points.length-2];
-        const b=points[points.length-1];
-        drawCtx.beginPath();
-        drawCtx.moveTo(a.x, a.y);
-        drawCtx.lineTo(b.x, b.y);
-        drawCtx.stroke();
-    }
     drawing=false;
-    points=[];
+    currentPath=null;
 }
 
 function onTouchStart(e){if(!frozen) return; e.preventDefault(); onDrawStart(e.touches[0]);}
@@ -469,17 +541,14 @@ function onTouchMove(e){if(!frozen||!drawing) return; e.preventDefault(); onDraw
 
 function undo(){
     if(!dHistory.length) return;
-    const dpr = window.devicePixelRatio || 1;
-    drawCtx.setTransform(1,0,0,1,0,0);
-    drawCtx.putImageData(dHistory.pop(),0,0);
-    drawCtx.setTransform(dpr,0,0,dpr,0,0);
+    paths = JSON.parse(dHistory.pop());
+    redrawAll();
 }
+
 function clearDraw(){
-    const dpr = window.devicePixelRatio || 1;
-    drawCtx.setTransform(1,0,0,1,0,0);
-    dHistory.push(drawCtx.getImageData(0,0,drawCanvas.width,drawCanvas.height));
-    drawCtx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
-    drawCtx.setTransform(dpr,0,0,dpr,0,0);
+    dHistory.push(JSON.stringify(paths));
+    paths = [];
+    redrawAll();
 }
 
 // ═══════════════════════════
