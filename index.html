@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <meta name="description" content="تطبيق كاميرا متقدم مع كشاف ضوئي وتسجيل فيديو">
+    <title>كاميرا متقدمة | Advanced Camera</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <video id="cameraFeed" autoplay playsinline muted></video>
+    <canvas id="freezeCanvas"></canvas>
+    <canvas id="drawCanvas"></canvas>
+
+    <!-- ═══ Top bar (status + actions) ═══ -->
+    <div class="top-bar" id="topBar">
+        <div class="status-badge" id="statusBadge">
+            <span class="status-dot"></span>
+            <span class="status-text">غير متصل</span>
+        </div>
+        <div class="top-actions">
+            <button class="mini-btn" id="settingsBtn" title="إعدادات الكاميرا">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+            </button>
+            <button class="mini-btn" id="fullscreenBtn" title="شاشة كاملة">
+                <svg class="fs-expand" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+                    <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+                </svg>
+                <svg class="fs-compress" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:none">
+                    <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/>
+                    <line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>
+                </svg>
+            </button>
+            <button class="mini-btn" id="hideUIBtn" title="إخفاء الواجهة">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/><line x1="1" y1="1" x2="23" y2="23" stroke-width="3"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- ═══ Right side: control buttons ═══ -->
+    <div class="side-panel right-panel" id="rightPanel">
+        <button class="ctrl-btn" id="powerBtn" title="الكاميرا">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+            </svg>
+        </button>
+        <button class="ctrl-btn" id="freezeBtn" disabled title="تجميد">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="6" y="4" width="4" height="16" rx="1"/>
+                <rect x="14" y="4" width="4" height="16" rx="1"/>
+            </svg>
+        </button>
+        <button class="ctrl-btn" id="torchBtn" disabled title="الفلاش">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+        </button>
+    </div>
+
+    <!-- ═══ Left side: zoom ═══ -->
+    <div class="side-panel left-panel" id="leftPanel">
+        <span class="zoom-val" id="zoomLabel">1×</span>
+        <input type="range" class="zoom-range" id="zoomSlider" min="1" max="10" step="0.1" value="1" orient="vertical" disabled>
+    </div>
+
+    <!-- ═══ Bottom bar: lens + info ═══ -->
+    <div class="bottom-bar" id="bottomBar">
+        <div class="lens-row" id="lensRow">
+            <button class="lens-pill active" data-lens="main" id="lensMain">1×</button>
+            <button class="lens-pill" data-lens="wide" id="lensWide">0.5×</button>
+        </div>
+        <div class="info-row">
+            <span class="info-tag" id="resolutionText">--</span>
+            <span class="info-tag" id="cameraText">الكاميرا الخلفية</span>
+        </div>
+    </div>
+
+    <!-- ═══ Draw toolbar (freeze only) ═══ -->
+    <div class="draw-bar" id="drawToolbar">
+        <div class="draw-bar-inner">
+            <!-- Unfreeze -->
+            <button class="draw-btn unfreeze" id="unfreezeBtn" title="إلغاء التجميد">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </button>
+            <div class="draw-sep"></div>
+            <!-- Colors -->
+            <div class="draw-colors" id="drawColors">
+                <button class="clr-dot active" data-color="#ff3b30" style="background:#ff3b30"></button>
+                <button class="clr-dot" data-color="#fbbf24" style="background:#fbbf24"></button>
+                <button class="clr-dot" data-color="#34d399" style="background:#34d399"></button>
+                <button class="clr-dot" data-color="#3b82f6" style="background:#3b82f6"></button>
+                <button class="clr-dot" data-color="#ffffff" style="background:#ffffff"></button>
+            </div>
+            <div class="draw-sep"></div>
+            <!-- Sizes -->
+            <div class="draw-sizes" id="drawSizes">
+                <button class="sz-btn active" data-size="3"><span class="sz-circle" style="width:5px;height:5px"></span></button>
+                <button class="sz-btn" data-size="8"><span class="sz-circle" style="width:10px;height:10px"></span></button>
+                <button class="sz-btn" data-size="16"><span class="sz-circle" style="width:15px;height:15px"></span></button>
+            </div>
+            <div class="draw-sep"></div>
+            <!-- Tools -->
+            <button class="draw-btn" id="eraserBtn" title="ممحاة">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7L3 16c-.8-.8-.8-2 0-2.8L14.6 1.6c.8-.8 2-.8 2.8 0l5 5c.8.8.8 2 0 2.8L12 20"/></svg>
+            </button>
+            <button class="draw-btn" id="undoBtn" title="تراجع">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            </button>
+            <button class="draw-btn" id="clearDrawBtn" title="مسح">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Restore button -->
+    <button class="restore-btn" id="restoreBtn" title="إظهار الواجهة">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+        </svg>
+    </button>
+
+    <!-- ═══ Settings Panel ═══ -->
+    <div class="settings-overlay" id="settingsOverlay"></div>
+    <div class="settings-panel" id="settingsPanel">
+        <div class="settings-header">
+            <h3>إعدادات الكاميرا</h3>
+            <button class="settings-close" id="settingsClose">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="settings-body">
+            <div class="setting-group">
+                <label class="setting-label">الجودة</label>
+                <div class="setting-options" id="qualityOptions">
+                    <button class="opt-btn" data-val="720">720p</button>
+                    <button class="opt-btn active" data-val="1080">1080p</button>
+                    <button class="opt-btn" data-val="max">أعلى دقة</button>
+                </div>
+            </div>
+            <div class="setting-group">
+                <label class="setting-label">الفريمات</label>
+                <div class="setting-options" id="fpsOptions">
+                    <button class="opt-btn" data-val="24">24fps</button>
+                    <button class="opt-btn active" data-val="30">30fps</button>
+                    <button class="opt-btn" data-val="60">60fps</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error modal -->
+    <div class="modal-bg" id="errorModal">
+        <div class="modal-box">
+            <div class="modal-ico">
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            </div>
+            <h2 id="errorTitle">خطأ</h2>
+            <p id="errorMessage">حدث خطأ</p>
+            <button class="modal-action" id="errorRetryBtn">إعادة المحاولة</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
