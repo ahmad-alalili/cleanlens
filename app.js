@@ -758,6 +758,7 @@ function updateFSIcon(){
     fsExpand.style.display=f?'none':'';
     fsCompress.style.display=f?'':'none';
     fsBtn.classList.toggle('on',f);
+    statusBadge.style.display=f?'none':'';
 }
 function checkFS(){
     const el=document.documentElement;
