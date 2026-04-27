@@ -111,7 +111,13 @@ function init(){
 
     // Double-tap
     let lastTap=0;
+    let wasMultiTouch=false;
+    document.addEventListener('touchstart', e=>{
+        if(e.touches.length > 1) wasMultiTouch=true;
+    }, {passive: true});
     document.addEventListener('touchend', e=>{
+        if(e.touches.length > 0) return;
+        if(wasMultiTouch){ wasMultiTouch=false; return; }
         if(frozen && (e.target===drawCanvas || drawBar.contains(e.target))) return;
         const now=Date.now();
         if(now-lastTap<300){e.preventDefault(); toggleUI();}
@@ -253,7 +259,15 @@ function init(){
     drawCanvas.addEventListener('touchcancel', onDrawEnd);
 
     checkFS();
-    enumCams();
+    navigator.mediaDevices.getUserMedia({video: true})
+        .then(s => {
+            s.getTracks().forEach(t => t.stop());
+            enumCams();
+        })
+        .catch(err => {
+            console.warn('Auto permission denied', err);
+            enumCams();
+        });
 }
 
 // ═══════════════════════════
@@ -661,13 +675,22 @@ function onDrawEnd(){
     currentPath=null;
 }
 
+let singleTouchPathAdded = false;
+
 function onTouchStart(e){
     if(!frozen) return; 
     if(e.touches.length > 1) {
-        if(drawing) onDrawEnd();
+        if(drawing) {
+            onDrawEnd();
+            if(singleTouchPathAdded) {
+                undo();
+                singleTouchPathAdded = false;
+            }
+        }
         return;
     }
     e.preventDefault(); 
+    singleTouchPathAdded = true;
     onDrawStart(e.touches[0]);
 }
 function onTouchMove(e){
@@ -675,6 +698,7 @@ function onTouchMove(e){
     if(e.touches.length > 1) return;
     if(!drawing) return; 
     e.preventDefault(); 
+    singleTouchPathAdded = false;
     onDraw(e.touches[0]);
 }
 
