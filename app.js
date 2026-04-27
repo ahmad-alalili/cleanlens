@@ -118,39 +118,106 @@ function init(){
         lastTap=now;
     });
 
-    // Pinch-to-zoom
+    // Pinch-to-zoom and two-finger swipe
     let lastPinchDist = 0;
+    
+    let twoFingerStartY = 0;
+    let twoFingerStartX = 0;
+    let twoFingerSwipeTriggered = false;
+
+    let fzPinchDist = 0;
+    let fzPinchCenter = {x:0, y:0};
 
     document.addEventListener('touchstart', e => {
-        if(!frozen && e.touches.length === 2 && !zoomSlider.disabled) {
-            lastPinchDist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
+        if(e.touches.length === 2) {
+            if(!frozen) {
+                if(!zoomSlider.disabled) {
+                    lastPinchDist = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                }
+            } else {
+                fzPinchDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                fzPinchCenter = {
+                    x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+                    y: (e.touches[0].clientY + e.touches[1].clientY) / 2
+                };
+            }
+            
+            twoFingerStartY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            twoFingerStartX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            twoFingerSwipeTriggered = false;
         }
     }, {passive: false});
 
     document.addEventListener('touchmove', e => {
-        if(!frozen && e.touches.length === 2 && !zoomSlider.disabled) {
+        if(e.touches.length === 2) {
             e.preventDefault(); 
-            const currentDist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
-            if(lastPinchDist > 0) {
-                const delta = currentDist - lastPinchDist;
-                const maxZ = parseFloat(zoomSlider.max) || 10;
-                const minZ = parseFloat(zoomSlider.min) || 1;
+            let currentY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            let currentX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            
+            if(!twoFingerSwipeTriggered && Math.abs(currentX - twoFingerStartX) < 100) {
+                if(currentY - twoFingerStartY > 100) {
+                    toggleTorch();
+                    twoFingerSwipeTriggered = true;
+                }
+            }
+
+            if(!frozen) {
+                const currentDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                if(lastPinchDist > 0 && !zoomSlider.disabled && !twoFingerSwipeTriggered) {
+                    const delta = currentDist - lastPinchDist;
+                    const maxZ = parseFloat(zoomSlider.max) || 10;
+                    const minZ = parseFloat(zoomSlider.min) || 1;
+                    const sensitivity = (maxZ - minZ) / 300; 
+                    let newZoom = parseFloat(zoomSlider.value) + (delta * sensitivity);
+                    newZoom = Math.max(minZ, Math.min(newZoom, maxZ));
+                    zoomSlider.value = newZoom;
+                    onZoom();
+                    lastPinchDist = currentDist;
+                }
+            } else {
+                const currentDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                const currentCenter = { x: currentX, y: currentY };
                 
-                // Sensitivity: 300 pixels movement = full range
-                const sensitivity = (maxZ - minZ) / 300; 
-                let newZoom = parseFloat(zoomSlider.value) + (delta * sensitivity);
-                
-                newZoom = Math.max(minZ, Math.min(newZoom, maxZ));
-                zoomSlider.value = newZoom;
-                onZoom();
-                
-                lastPinchDist = currentDist;
+                if(fzPinchDist > 0 && !twoFingerSwipeTriggered) {
+                    const scaleDiff = currentDist / fzPinchDist;
+                    let newScale = freezeScale * scaleDiff;
+                    newScale = Math.max(1, Math.min(newScale, 10));
+                    
+                    const scaleRatio = newScale / freezeScale;
+                    
+                    freezePanX = currentCenter.x - (currentCenter.x - freezePanX) * scaleRatio;
+                    freezePanY = currentCenter.y - (currentCenter.y - freezePanY) * scaleRatio;
+                    
+                    freezePanX += (currentCenter.x - fzPinchCenter.x);
+                    freezePanY += (currentCenter.y - fzPinchCenter.y);
+                    
+                    freezeScale = newScale;
+                    
+                    const maxPanX = 0;
+                    const minPanX = window.innerWidth * (1 - freezeScale);
+                    const maxPanY = 0;
+                    const minPanY = window.innerHeight * (1 - freezeScale);
+                    
+                    freezePanX = Math.max(minPanX, Math.min(maxPanX, freezePanX));
+                    freezePanY = Math.max(minPanY, Math.min(maxPanY, freezePanY));
+                    
+                    updateFreezeTransform();
+                    
+                    fzPinchDist = currentDist;
+                    fzPinchCenter = currentCenter;
+                }
             }
         }
     }, {passive: false});
@@ -364,6 +431,19 @@ function toggleFreeze(){
     frozen ? unfreeze() : freeze();
 }
 
+let torchWasOnBeforeFreeze = false;
+let freezeScale = 1;
+let freezePanX = 0;
+let freezePanY = 0;
+
+function updateFreezeTransform() {
+    const transform = `translate(${freezePanX}px, ${freezePanY}px) scale(${freezeScale})`;
+    frzCanvas.style.transformOrigin = '0 0';
+    drawCanvas.style.transformOrigin = '0 0';
+    frzCanvas.style.transform = transform;
+    drawCanvas.style.transform = transform;
+}
+
 function freeze(){
     if(!stream||!track) return;
     const dpr = window.devicePixelRatio || 1;
@@ -415,6 +495,18 @@ function freeze(){
     frozen=true;
     freezeBtn.classList.add('f-on');
     dHistory=[]; paths=[]; currentPath=null; drawing=false;
+
+    torchWasOnBeforeFreeze = torchOn;
+    if(torchOn) {
+        torchOn = false;
+        try { track.applyConstraints({advanced:[{torch:false}]}); } catch(e){}
+        torchBtn.classList.remove('t-on');
+    }
+    
+    freezeScale = 1;
+    freezePanX = 0;
+    freezePanY = 0;
+    updateFreezeTransform();
 }
 
 function unfreeze(){
@@ -430,6 +522,13 @@ function unfreeze(){
 
     frozen=false;
     freezeBtn.classList.remove('f-on');
+    
+    if(torchWasOnBeforeFreeze && !torchOn) {
+        torchOn = true;
+        try { track.applyConstraints({advanced:[{torch:true}]}); } catch(e){}
+        torchBtn.classList.add('t-on');
+    }
+    
     if(stream) statusText.textContent=torchOn?'الكاميرا + الفلاش':'الكاميرا مفعّلة';
     drawCtx.setTransform(1,0,0,1,0,0);
     drawCtx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
@@ -440,10 +539,13 @@ function unfreeze(){
 //  DRAWING
 // ═══════════════════════════
 function pos(e){
-    // Direct CSS pixel coords — the drawCtx has a DPR transform
-    // so CSS pixels map 1:1 with the finger/mouse position
     const r = drawCanvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    const scaleX = drawCanvas.offsetWidth / r.width;
+    const scaleY = drawCanvas.offsetHeight / r.height;
+    return { 
+        x: (e.clientX - r.left) * scaleX, 
+        y: (e.clientY - r.top) * scaleY 
+    };
 }
 
 function redrawAll() {
@@ -559,8 +661,22 @@ function onDrawEnd(){
     currentPath=null;
 }
 
-function onTouchStart(e){if(!frozen) return; e.preventDefault(); onDrawStart(e.touches[0]);}
-function onTouchMove(e){if(!frozen||!drawing) return; e.preventDefault(); onDraw(e.touches[0]);}
+function onTouchStart(e){
+    if(!frozen) return; 
+    if(e.touches.length > 1) {
+        if(drawing) onDrawEnd();
+        return;
+    }
+    e.preventDefault(); 
+    onDrawStart(e.touches[0]);
+}
+function onTouchMove(e){
+    if(!frozen) return; 
+    if(e.touches.length > 1) return;
+    if(!drawing) return; 
+    e.preventDefault(); 
+    onDraw(e.touches[0]);
+}
 
 function undo(){
     if(!dHistory.length) return;
