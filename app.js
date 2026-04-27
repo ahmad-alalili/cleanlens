@@ -170,6 +170,9 @@ function init(){
                 if(currentY - twoFingerStartY > 100) {
                     toggleTorch();
                     twoFingerSwipeTriggered = true;
+                } else if(twoFingerStartY - currentY > 100) {
+                    toggleFreeze();
+                    twoFingerSwipeTriggered = true;
                 }
             }
 
@@ -259,15 +262,7 @@ function init(){
     drawCanvas.addEventListener('touchcancel', onDrawEnd);
 
     checkFS();
-    navigator.mediaDevices.getUserMedia({video: true})
-        .then(s => {
-            s.getTracks().forEach(t => t.stop());
-            enumCams();
-        })
-        .catch(err => {
-            console.warn('Auto permission denied', err);
-            enumCams();
-        });
+    startCam();
 }
 
 // ═══════════════════════════
