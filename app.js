@@ -40,8 +40,7 @@ const clearBtn   = document.getElementById('clearDrawBtn');
 const unfreezeBtn= document.getElementById('unfreezeBtn');
 const zoomSlider = document.getElementById('zoomSlider');
 const zoomLabel  = document.getElementById('zoomLabel');
-const lensMain   = document.getElementById('lensMain');
-const lensWide   = document.getElementById('lensWide');
+const switchCamBtn = document.getElementById('switchCamBtn');
 const settingsBtn  = document.getElementById('settingsBtn');
 const settingsPanel= document.getElementById('settingsPanel');
 const settingsOverlay= document.getElementById('settingsOverlay');
@@ -57,8 +56,8 @@ const drawCtx = drawCanvas.getContext('2d');
 let stream=null, track=null;
 let torchOn=false, torchSupported=false;
 let uiHidden=false, frozen=false;
-let currentLens='main';
-let allDevices=[], hasMultiCam=false;
+let currentCamIndex=0;
+let allCameras=[];
 
 // Drawing
 let dColor='#ff3b30', dSize=3, isEraser=false, drawing=false;
@@ -80,14 +79,44 @@ function init(){
     powerBtn.addEventListener('click', toggleCamera);
     freezeBtn.addEventListener('click', toggleFreeze);
     torchBtn.addEventListener('click', toggleTorch);
+    switchCamBtn.addEventListener('click', toggleCameraLens);
     fsBtn.addEventListener('click', toggleFS);
     hideUIBtn.addEventListener('click', hideUI);
     restoreBtn.addEventListener('click', showUI);
     unfreezeBtn.addEventListener('click', unfreeze);
     errorRetry.addEventListener('click', ()=>{ closeErr(); toggleCamera(); });
 
-    lensMain.addEventListener('click', ()=>switchLens('main'));
-    lensWide.addEventListener('click', ()=>switchLens('wide'));
+    document.getElementById('lensRow').addEventListener('click', (e) => {
+        const btn = e.target.closest('.lens-pill');
+        if(!btn) return;
+        document.querySelectorAll('#lensRow .lens-pill').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        
+        const zoomVal = parseFloat(btn.getAttribute('data-lens'));
+        if(track && !zoomSlider.disabled) {
+            zoomSlider.value = zoomVal;
+            onZoom();
+        }
+    });
+    
+    // Add touch dragging to zoom arc SVG
+    const arcContainer = document.querySelector('.zoom-arc');
+    if(arcContainer) {
+        arcContainer.addEventListener('touchmove', (e) => {
+            if(zoomSlider.disabled) return;
+            e.preventDefault();
+            const rect = arcContainer.getBoundingClientRect();
+            let y = e.touches[0].clientY - rect.top;
+            y = Math.max(0, Math.min(y, rect.height));
+            // y=150 is min zoom, y=0 is max zoom
+            const percent = 1 - (y / rect.height);
+            const min = parseFloat(zoomSlider.min) || 1;
+            const max = parseFloat(zoomSlider.max) || 10;
+            zoomSlider.value = min + percent * (max - min);
+            onZoom();
+        }, {passive: false});
+    }
+
     zoomSlider.addEventListener('input', onZoom);
 
     document.addEventListener('fullscreenchange', updateFSIcon);
@@ -98,6 +127,7 @@ function init(){
     settingsClose.addEventListener('click', closeSettings);
     settingsOverlay.addEventListener('click', closeSettings);
     initSettings();
+    initVisibility();
 
     // Help
     const helpBtn = document.getElementById('helpBtn');
@@ -341,14 +371,11 @@ function initWelcome(){
 async function enumCams(){
     try{
         const d=await navigator.mediaDevices.enumerateDevices();
-        allDevices=d.filter(x=>x.kind==='videoinput');
-        hasMultiCam=allDevices.length>1;
-        // Always show wide lens button — user can try it
-        // Only hide if we're certain there's exactly 1 camera AND labels are available
-        if(allDevices.length===1 && allDevices[0].label){
-            lensWide.style.display='none';
+        allCameras=d.filter(x=>x.kind==='videoinput');
+        if (allCameras.length > 1) {
+            switchCamBtn.disabled = false;
         } else {
-            lensWide.style.display='';
+            switchCamBtn.disabled = true;
         }
     }catch(_){}
 }
@@ -360,8 +387,6 @@ async function toggleCamera(){
 
 async function startCam(){
     try{
-        const fm = currentLens==='wide' ? {exact:'environment'} : {ideal:'environment'};
-        
         // Resolution based on settings
         let targetWidth = 1920, targetHeight = 1080;
         if(recSettings.quality === '720') {
@@ -376,16 +401,17 @@ async function startCam(){
 
         const c = {
             video:{
-                facingMode:fm, 
                 width:{ideal:targetWidth}, 
                 height:{ideal:targetHeight}, 
                 frameRate:{ideal:targetFps, min:Math.min(24, targetFps)}
             },
             audio:false
         };
-        if(currentLens==='wide' && hasMultiCam){
-            const wd=findWide();
-            if(wd){delete c.video.facingMode; c.video.deviceId={exact:wd.deviceId};}
+        
+        if (allCameras.length > 0) {
+            c.video.deviceId = { exact: allCameras[currentCamIndex].deviceId };
+        } else {
+            c.video.facingMode = { ideal: 'environment' };
         }
 
         stream=await navigator.mediaDevices.getUserMedia(c);
@@ -428,23 +454,12 @@ async function startCam(){
     }
 }
 
-function findWide(){
-    const w=allDevices.find(d=>/wide|ultra|0\.5|超广/i.test(d.label));
-    if(w) return w;
-    if(allDevices.length>=3) return allDevices[allDevices.length-1];
-    if(allDevices.length===2&&track){
-        const cur=track.getSettings().deviceId;
-        return allDevices.find(d=>d.deviceId!==cur);
-    }
-    return null;
-}
-
-async function switchLens(lens){
-    if(lens===currentLens&&stream) return;
-    currentLens=lens;
-    lensMain.classList.toggle('active',lens==='main');
-    lensWide.classList.toggle('active',lens==='wide');
-    if(stream){if(frozen) unfreeze(); stopCam(); await startCam();}
+async function toggleCameraLens(){
+    if(allCameras.length <= 1 || !stream) return;
+    currentCamIndex = (currentCamIndex + 1) % allCameras.length;
+    if(frozen) unfreeze(); 
+    stopCam(); 
+    await startCam();
 }
 
 let lastZoomTime = 0;
@@ -474,6 +489,36 @@ function onZoom(){
 function updZoomLbl(){
     const v=parseFloat(zoomSlider.value);
     zoomLabel.textContent=v>=10?Math.round(v)+'×':v.toFixed(1)+'×';
+    
+    // Update SVG arc if present
+    const min = parseFloat(zoomSlider.min) || 1;
+    const max = parseFloat(zoomSlider.max) || 10;
+    const percent = (v - min) / (max - min || 1);
+    
+    const arcFill = document.querySelector('.arc-fill');
+    const arcThumb = document.querySelector('.arc-thumb');
+    
+    if(arcFill && arcThumb) {
+        const pathLen = 135; // approx length of M 36 10 Q 4 75 36 140
+        const dashVal = percent * pathLen;
+        arcFill.style.strokeDasharray = `${dashVal} ${pathLen}`;
+        
+        // Quadratic Bezier: P(t) = (1-t)^2*P0 + 2*(1-t)*t*P1 + t^2*P2
+        // t = percent. P0 = (36, 140), P1 = (4, 75), P2 = (36, 10)
+        const t = percent;
+        const y = Math.pow(1-t, 2)*140 + 2*(1-t)*t*75 + Math.pow(t, 2)*10;
+        const x = Math.pow(1-t, 2)*36 + 2*(1-t)*t*4 + Math.pow(t, 2)*36;
+        
+        arcThumb.setAttribute('cx', x);
+        arcThumb.setAttribute('cy', y);
+    }
+
+    // Sync bottom buttons
+    const roundedZoom = Math.round(v);
+    document.querySelectorAll('#lensRow .lens-pill').forEach(btn => {
+        const btnVal = parseFloat(btn.getAttribute('data-lens'));
+        btn.classList.toggle('active', btnVal === roundedZoom);
+    });
 }
 
 async function toggleTorch(){
@@ -919,6 +964,35 @@ function applyOptState(container, val){
 function selectOpt(container, btn){
     container.querySelectorAll('.opt-btn').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
+}
+
+function initVisibility() {
+    const toggles = [
+        { id: 'showHelp', el: document.getElementById('helpBtn') },
+        { id: 'showFullscreen', el: document.getElementById('fullscreenBtn') },
+        { id: 'showHideUI', el: document.getElementById('hideUIBtn') },
+        { id: 'showFreeze', el: document.getElementById('freezeBtn') },
+        { id: 'showFlash', el: document.getElementById('torchBtn') },
+        { id: 'showZoomBar', el: document.getElementById('leftPanel') },
+        { id: 'showSwitchCam', el: document.getElementById('switchCamBtn') },
+        { id: 'showBottomBar', el: document.getElementById('bottomBar') }
+    ];
+    
+    toggles.forEach(t => {
+        const cb = document.getElementById(t.id);
+        if(!cb || !t.el) return;
+        
+        const saved = localStorage.getItem('ui_' + t.id);
+        if(saved !== null) {
+            cb.checked = saved === 'true';
+            t.el.style.display = cb.checked ? '' : 'none';
+        }
+        
+        cb.addEventListener('change', () => {
+            t.el.style.display = cb.checked ? '' : 'none';
+            localStorage.setItem('ui_' + t.id, cb.checked);
+        });
+    });
 }
 
 function openSettings(){

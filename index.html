@@ -73,6 +73,11 @@
                     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
                 </svg>
             </button>
+            <button class="ctrl-btn" id="switchCamBtn" disabled title="تبديل العدسة">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+                </svg>
+            </button>
         </div>
     </div>
 
@@ -80,6 +85,13 @@
     <div class="side-panel left-panel" id="leftPanel">
         <div class="zoom-group">
             <span class="zoom-val" id="zoomLabel">1×</span>
+            <div class="zoom-arc">
+                <svg viewBox="0 0 40 150">
+                    <path class="arc-track" d="M 36 10 Q 4 75 36 140" />
+                    <path class="arc-fill" d="M 36 10 Q 4 75 36 140" />
+                    <circle class="arc-thumb" cx="36" cy="140" r="8" />
+                </svg>
+            </div>
             <input type="range" class="zoom-range" id="zoomSlider" min="1" max="10" step="0.1" value="1" orient="vertical" disabled>
         </div>
     </div>
@@ -87,8 +99,16 @@
     <!-- ═══ Bottom bar: lens + info ═══ -->
     <div class="bottom-bar" id="bottomBar">
         <div class="lens-row" id="lensRow">
-            <button class="lens-pill active" data-lens="main" id="lensMain">1×</button>
-            <button class="lens-pill" data-lens="wide" id="lensWide">0.5×</button>
+            <button class="lens-pill active" data-lens="1">1×</button>
+            <button class="lens-pill" data-lens="2">2×</button>
+            <button class="lens-pill" data-lens="3">3×</button>
+            <button class="lens-pill" data-lens="4">4×</button>
+            <button class="lens-pill" data-lens="5">5×</button>
+            <button class="lens-pill" data-lens="6">6×</button>
+            <button class="lens-pill" data-lens="7">7×</button>
+            <button class="lens-pill" data-lens="8">8×</button>
+            <button class="lens-pill" data-lens="9">9×</button>
+            <button class="lens-pill" data-lens="10">10×</button>
         </div>
         <div class="info-row">
             <span class="info-tag" id="resolutionText">--</span>
@@ -172,6 +192,19 @@
                 <div class="setting-options" id="warningOptions">
                     <button class="opt-btn active" data-val="on">مفعّل</button>
                     <button class="opt-btn" data-val="off">معطّل</button>
+                </div>
+            </div>
+            <div class="setting-group">
+                <label class="setting-label">تخصيص الواجهة</label>
+                <div class="setting-toggles" id="uiVisibilityOptions">
+                    <label class="ui-toggle"><input type="checkbox" id="showHelp" checked> المساعدة</label>
+                    <label class="ui-toggle"><input type="checkbox" id="showFullscreen" checked> ملء الشاشة</label>
+                    <label class="ui-toggle"><input type="checkbox" id="showHideUI" checked> إخفاء الواجهة</label>
+                    <label class="ui-toggle"><input type="checkbox" id="showFreeze" checked> زر التجميد</label>
+                    <label class="ui-toggle"><input type="checkbox" id="showFlash" checked> زر الفلاش</label>
+                    <label class="ui-toggle"><input type="checkbox" id="showSwitchCam" checked> زر تبديل العدسة</label>
+                    <label class="ui-toggle"><input type="checkbox" id="showZoomBar" checked> شريط التقريب (الجانبي)</label>
+                    <label class="ui-toggle"><input type="checkbox" id="showBottomBar" checked> أزرار التقريب السفلية</label>
                 </div>
             </div>
         </div>
