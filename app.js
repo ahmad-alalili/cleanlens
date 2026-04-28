@@ -48,6 +48,7 @@ const settingsOverlay= document.getElementById('settingsOverlay');
 const settingsClose= document.getElementById('settingsClose');
 const qualityOpts = document.getElementById('qualityOptions');
 const fpsOpts     = document.getElementById('fpsOptions');
+const warningOpts = document.getElementById('warningOptions');
 
 const frzCtx  = frzCanvas.getContext('2d');
 const drawCtx = drawCanvas.getContext('2d');
@@ -68,7 +69,8 @@ let dHistory=[];
 // Settings
 let recSettings={
     quality: '1080',
-    fps: 30
+    fps: 30,
+    warnings: 'on'
 };
 
 // ═══════════════════════════
@@ -97,11 +99,30 @@ function init(){
     settingsOverlay.addEventListener('click', closeSettings);
     initSettings();
 
+    // Help
+    const helpBtn = document.getElementById('helpBtn');
+    const helpPanel = document.getElementById('helpPanel');
+    const helpOverlay = document.getElementById('helpOverlay');
+    const helpClose = document.getElementById('helpClose');
+    helpBtn.addEventListener('click', ()=>{
+        helpOverlay.classList.add('on');
+        helpPanel.classList.add('on');
+    });
+    helpClose.addEventListener('click', ()=>{
+        helpOverlay.classList.remove('on');
+        helpPanel.classList.remove('on');
+    });
+    helpOverlay.addEventListener('click', ()=>{
+        helpOverlay.classList.remove('on');
+        helpPanel.classList.remove('on');
+    });
+
     // Keys
     document.addEventListener('keydown', e=>{
         if(e.code==='Space'){e.preventDefault(); toggleUI();}
         if(e.code==='Escape'&&!document.fullscreenElement){
             if(settingsPanel.classList.contains('on')){closeSettings(); return;}
+            if(helpPanel.classList.contains('on')){helpOverlay.classList.remove('on'); helpPanel.classList.remove('on'); return;}
             if(frozen) unfreeze(); else if(uiHidden) showUI();
         }
         if(e.code==='KeyF'&&stream&&!frozen){e.preventDefault(); toggleTorch();}
@@ -263,6 +284,55 @@ function init(){
 
     checkFS();
     startCam();
+    initWelcome();
+}
+
+// ═══════════════════════════
+//  WELCOME ONBOARDING
+// ═══════════════════════════
+function initWelcome(){
+    if(localStorage.getItem('cleanlens_welcomed')) return;
+    
+    const overlay = document.getElementById('welcomeOverlay');
+    const slides = document.querySelectorAll('.welcome-slide');
+    const dots = document.querySelectorAll('.welcome-dots .dot');
+    const nextBtn = document.getElementById('welcomeNext');
+    const skipBtn = document.getElementById('welcomeSkip');
+    let current = 0;
+    
+    overlay.classList.add('on');
+    
+    function goTo(idx){
+        slides[current].classList.remove('active');
+        dots[current].classList.remove('active');
+        current = idx;
+        slides[current].classList.remove('active');
+        // Force reflow for animation
+        void slides[current].offsetWidth;
+        slides[current].classList.add('active');
+        dots[current].classList.add('active');
+        
+        if(current === slides.length - 1){
+            nextBtn.textContent = 'ابدأ';
+        } else {
+            nextBtn.textContent = 'التالي';
+        }
+    }
+    
+    function closeWelcome(){
+        overlay.classList.remove('on');
+        localStorage.setItem('cleanlens_welcomed', '1');
+    }
+    
+    nextBtn.addEventListener('click', ()=>{
+        if(current < slides.length - 1){
+            goTo(current + 1);
+        } else {
+            closeWelcome();
+        }
+    });
+    
+    skipBtn.addEventListener('click', closeWelcome);
 }
 
 // ═══════════════════════════
@@ -804,6 +874,7 @@ function initSettings(){
     // Apply saved state to buttons
     applyOptState(qualityOpts, recSettings.quality);
     applyOptState(fpsOpts, String(recSettings.fps));
+    applyOptState(warningOpts, recSettings.warnings || 'on');
 
     // Event listeners
     qualityOpts.addEventListener('click', async e=>{
@@ -811,6 +882,9 @@ function initSettings(){
         selectOpt(qualityOpts, b);
         recSettings.quality=b.dataset.val;
         saveSettings();
+        if(b.dataset.val === 'max' && recSettings.warnings !== 'off') {
+            showWarning('⚠ أعلى دقة قد ترفع حرارة الجهاز');
+        }
         if(stream){
             if(frozen) unfreeze();
             stopCam();
@@ -827,6 +901,12 @@ function initSettings(){
             stopCam();
             await startCam();
         }
+    });
+    warningOpts.addEventListener('click', e=>{
+        const b=e.target.closest('.opt-btn'); if(!b||b.disabled) return;
+        selectOpt(warningOpts, b);
+        recSettings.warnings=b.dataset.val;
+        saveSettings();
     });
 }
 
@@ -849,6 +929,27 @@ function openSettings(){
 function closeSettings(){
     settingsOverlay.classList.remove('on');
     settingsPanel.classList.remove('on');
+}
+
+let warningTimer = null;
+function showWarning(msg){
+    const toast = document.getElementById('warningToast');
+    const text = document.getElementById('warningText');
+    text.textContent = msg;
+    
+    // Reset state
+    clearTimeout(warningTimer);
+    toast.classList.remove('fade-out');
+    toast.classList.add('show');
+    
+    // Start fade out after 3 seconds
+    warningTimer = setTimeout(()=>{
+        toast.classList.add('fade-out');
+        // Fully hide after fade animation
+        setTimeout(()=>{
+            toast.classList.remove('show','fade-out');
+        }, 500);
+    }, 3000);
 }
 
 window.addEventListener('beforeunload', ()=>{

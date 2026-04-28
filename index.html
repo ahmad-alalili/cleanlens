@@ -21,6 +21,13 @@
             <span class="status-text">غير متصل</span>
         </div>
         <div class="top-actions">
+            <button class="mini-btn" id="helpBtn" title="تعليمات">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+            </button>
             <button class="mini-btn" id="settingsBtn" title="إعدادات الكاميرا">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                     <circle cx="12" cy="12" r="3"/>
@@ -160,6 +167,13 @@
                     <button class="opt-btn" data-val="60">60fps</button>
                 </div>
             </div>
+            <div class="setting-group">
+                <label class="setting-label">التنبيهات</label>
+                <div class="setting-options" id="warningOptions">
+                    <button class="opt-btn active" data-val="on">مفعّل</button>
+                    <button class="opt-btn" data-val="off">معطّل</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -172,6 +186,98 @@
             <h2 id="errorTitle">خطأ</h2>
             <p id="errorMessage">حدث خطأ</p>
             <button class="modal-action" id="errorRetryBtn">إعادة المحاولة</button>
+        </div>
+    </div>
+
+    <!-- Warning Toast -->
+    <div class="warning-toast" id="warningToast">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <span id="warningText">أعلى دقة قد ترفع حرارة الجهاز</span>
+    </div>
+
+    <!-- ═══ Welcome Onboarding (first time only) ═══ -->
+    <div class="welcome-overlay" id="welcomeOverlay">
+        <div class="welcome-box">
+            <div class="welcome-slides" id="welcomeSlides">
+                <div class="welcome-slide active">
+                    <div class="slide-icon">📷</div>
+                    <h2>مرحباً بك في CleanLens</h2>
+                    <p>تطبيق كاميرا متقدم مع فلاش وتجميد ورسم</p>
+                </div>
+                <div class="welcome-slide">
+                    <div class="slide-icon">✨</div>
+                    <h2>الإيماءات</h2>
+                    <p>اسحب بإصبعين للأسفل للفلاش، وللأعلى للتجميد، وانقر مرتين لإخفاء الواجهة</p>
+                </div>
+                <div class="welcome-slide">
+                    <div class="slide-icon">✏️</div>
+                    <h2>ارسم على الصورة</h2>
+                    <p>عند تجميد الصورة، ارسم بإصبع واحد وكبّر بإصبعين</p>
+                </div>
+            </div>
+            <div class="welcome-dots" id="welcomeDots">
+                <span class="dot active"></span>
+                <span class="dot"></span>
+                <span class="dot"></span>
+            </div>
+            <div class="welcome-actions">
+                <button class="welcome-skip" id="welcomeSkip">تخطي</button>
+                <button class="welcome-next" id="welcomeNext">التالي</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Help Panel ═══ -->
+    <div class="settings-overlay" id="helpOverlay"></div>
+    <div class="settings-panel help-panel" id="helpPanel">
+        <div class="settings-header">
+            <h3>دليل الاستخدام</h3>
+            <button class="settings-close" id="helpClose">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="settings-body help-body">
+            <div class="help-section">
+                <h4 class="help-title">📷 الأزرار</h4>
+                <ul class="help-list">
+                    <li><strong>أيقونة الكاميرا:</strong> تشغيل/إيقاف الكاميرا</li>
+                    <li><strong>أيقونة التجميد:</strong> تجميد الصورة الحالية</li>
+                    <li><strong>أيقونة البرق:</strong> تشغيل/إيقاف الفلاش</li>
+                    <li><strong>شريط التمرير:</strong> التحكم في مستوى التكبير</li>
+                    <li><strong>الترس:</strong> الإعدادات (الجودة والفريمات)</li>
+                    <li><strong>العين:</strong> إخفاء الواجهة لشاشة نظيفة</li>
+                </ul>
+            </div>
+            <div class="help-section">
+                <h4 class="help-title">✋ الإيماءات</h4>
+                <ul class="help-list">
+                    <li><strong>سحب إصبعين للأسفل:</strong> تشغيل/إيقاف الفلاش</li>
+                    <li><strong>سحب إصبعين للأعلى:</strong> تجميد/إلغاء تجميد الصورة</li>
+                    <li><strong>قرّب إصبعين:</strong> تكبير/تصغير الصورة</li>
+                    <li><strong>نقر مرتين:</strong> إخفاء/إظهار الواجهة</li>
+                </ul>
+            </div>
+            <div class="help-section">
+                <h4 class="help-title">✏️ الرسم (عند التجميد)</h4>
+                <ul class="help-list">
+                    <li><strong>إصبع واحد:</strong> الرسم على الشاشة</li>
+                    <li><strong>الألوان والأحجام:</strong> اختر من شريط الرسم السفلي</li>
+                    <li><strong>الممحاة:</strong> امسح خطوط محددة باللمس</li>
+                    <li><strong>التراجع:</strong> ألغِ آخر خطوة رسم</li>
+                </ul>
+            </div>
+            <div class="help-section">
+                <h4 class="help-title">⌨️ اختصارات اللوحة</h4>
+                <ul class="help-list">
+                    <li><strong>Space:</strong> إخفاء/إظهار الواجهة</li>
+                    <li><strong>F:</strong> تشغيل/إيقاف الفلاش</li>
+                    <li><strong>G:</strong> تجميد/إلغاء التجميد</li>
+                    <li><strong>Ctrl+Z:</strong> تراجع الرسم</li>
+                </ul>
+            </div>
         </div>
     </div>
 
