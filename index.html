@@ -84,12 +84,14 @@
     <!-- ═══ Left side: zoom ═══ -->
     <div class="side-panel left-panel" id="leftPanel">
         <div class="zoom-group">
-            <span class="zoom-val" id="zoomLabel">1×</span>
             <div class="zoom-arc">
-                <svg viewBox="0 0 40 150">
-                    <path class="arc-track" d="M 36 10 Q 4 75 36 140" />
-                    <path class="arc-fill" d="M 36 10 Q 4 75 36 140" />
-                    <circle class="arc-thumb" cx="36" cy="140" r="8" />
+                <svg viewBox="0 0 70 150">
+                    <path class="arc-track" d="M 36 140 Q 4 75 36 10" />
+                    <path class="arc-fill" d="M 36 140 Q 4 75 36 10" />
+                    <g class="arc-thumb-grp">
+                        <path class="arc-thumb" d="M -4 -8 Q 2 0 -4 8" />
+                    </g>
+                    <text class="zoom-svg-txt" id="zoomSvgLabel" x="42" y="140">1×</text>
                 </svg>
             </div>
             <input type="range" class="zoom-range" id="zoomSlider" min="1" max="10" step="0.1" value="1" orient="vertical" disabled>
@@ -98,6 +100,9 @@
 
     <!-- ═══ Bottom bar: lens + info ═══ -->
     <div class="bottom-bar" id="bottomBar">
+        <div class="camera-row" id="physicalLensRow" style="display:none;">
+            <!-- Dynamic camera buttons go here -->
+        </div>
         <div class="lens-row" id="lensRow">
             <button class="lens-pill active" data-lens="1">1×</button>
             <button class="lens-pill" data-lens="2">2×</button>

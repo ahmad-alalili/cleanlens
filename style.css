@@ -200,20 +200,10 @@ html,body{
     box-shadow:var(--frosted-shadow);
 }
 
-.zoom-val{
-    font-size:.68rem;font-weight:700;color:var(--amber);
-    padding:6px 12px;border-radius:var(--r);text-align:center;min-width:40px;
-    background:var(--frosted-bg);
-    backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
-    border:1px solid var(--glass-border);
-    box-shadow:0 0 15px rgba(255,183,3,0.3), inset 0 0 8px rgba(255,183,3,0.1);
-    margin-left:8px;
-}
-
 /* Arc SVG track — replaces the straight range input */
 .zoom-arc{
     position:relative;
-    width:36px;height:150px;
+    width:70px;height:150px;
     flex-shrink:0;
     touch-action:none;
 }
@@ -227,10 +217,17 @@ html,body{
     transition:stroke-dasharray 0.1s linear;
     filter:drop-shadow(0 0 6px var(--amber));
 }
+.arc-thumb-grp{
+    transition: transform 0.1s linear;
+}
 .arc-thumb{
-    fill:var(--amber);cursor:pointer;
-    filter:drop-shadow(0 0 8px var(--amber));
-    transition:r 0.1s;
+    fill:none;stroke:var(--amber);stroke-width:4;stroke-linecap:round;
+    filter:drop-shadow(0 0 8px var(--amber));cursor:pointer;
+}
+.zoom-svg-txt{
+    font-family:var(--font);font-size:12px;font-weight:700;
+    fill:var(--amber);dominant-baseline:middle;text-anchor:start;
+    filter:drop-shadow(0 0 6px rgba(255,183,3,0.6));
 }
 
 /* Keep range input hidden but functional for JS hooks */
@@ -253,7 +250,7 @@ html,body{
 .bottom-bar.hide{opacity:0;transform:translateY(100%);pointer-events:none}
 
 /* ═══ Bottom Bar: Zoom Toggles ═══ */
-.lens-row{
+.camera-row, .lens-row{
     display:flex;
     background:var(--frosted-bg);
     backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
@@ -264,8 +261,8 @@ html,body{
     overflow-x:auto;white-space:nowrap;max-width:90vw;
     -ms-overflow-style:none;scrollbar-width:none;
 }
-.lens-row::-webkit-scrollbar{display:none;}
-.lens-pill{
+.camera-row::-webkit-scrollbar, .lens-row::-webkit-scrollbar{display:none;}
+.cam-pill, .lens-pill{
     flex-shrink:0;
     padding:8px 24px;
     background:transparent;
@@ -273,8 +270,8 @@ html,body{
     color:var(--txt);font-family:var(--font);font-size:.8rem;font-weight:700;
     cursor:pointer;transition:all var(--fast);outline:none;
 }
-.lens-pill:active{transform:scale(.92);}
-.lens-pill.active{
+.cam-pill:active, .lens-pill:active{transform:scale(.92);}
+.cam-pill.active, .lens-pill.active{
     background:rgba(255,255,255,0.15);
     color:var(--amber);
     box-shadow:0 0 25px rgba(255,183,3,0.6), inset 0 0 10px rgba(255,255,255,0.2);

@@ -37,9 +37,7 @@ const sizesEl    = document.getElementById('drawSizes');
 const eraserBtn  = document.getElementById('eraserBtn');
 const undoBtn    = document.getElementById('undoBtn');
 const clearBtn   = document.getElementById('clearDrawBtn');
-const unfreezeBtn= document.getElementById('unfreezeBtn');
 const zoomSlider = document.getElementById('zoomSlider');
-const zoomLabel  = document.getElementById('zoomLabel');
 const switchCamBtn = document.getElementById('switchCamBtn');
 const settingsBtn  = document.getElementById('settingsBtn');
 const settingsPanel= document.getElementById('settingsPanel');
@@ -377,6 +375,49 @@ async function enumCams(){
         } else {
             switchCamBtn.disabled = true;
         }
+        
+        // Populate physical lens row
+        const row = document.getElementById('physicalLensRow');
+        if(row && allCameras.length > 1) {
+            row.style.display = 'flex';
+            row.innerHTML = '';
+            
+            // Try to filter to back cameras, if none, use all
+            let backCams = allCameras.filter(c => c.facingMode === 'environment' || /back|env|خلفي/i.test(c.label));
+            if(backCams.length === 0) backCams = allCameras;
+            
+            backCams.forEach((cam, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'cam-pill';
+                
+                let label = cam.label.toLowerCase();
+                let name = 'عدسة ' + (i+1);
+                if(label.includes('front') || label.includes('أمامي')) name = 'أمامية';
+                else if(label.includes('ultra') || label.includes('wide') || label.includes('0.5')) name = 'واسعة';
+                else if(label.includes('tele') || label.includes('zoom') || label.includes('مقرب')) name = 'تقريب';
+                else if(i === 0) name = 'أساسية';
+                
+                btn.textContent = name;
+                btn.onclick = async () => {
+                    if(!stream) return;
+                    currentCamIndex = allCameras.indexOf(cam);
+                    document.querySelectorAll('#physicalLensRow .cam-pill').forEach(p=>p.classList.remove('active'));
+                    btn.classList.add('active');
+                    if(frozen) unfreeze();
+                    stopCam();
+                    await startCam();
+                };
+                
+                // Set active state
+                if (allCameras[currentCamIndex].deviceId === cam.deviceId) {
+                    btn.classList.add('active');
+                }
+                
+                row.appendChild(btn);
+            });
+        } else if(row) {
+            row.style.display = 'none';
+        }
     }catch(_){}
 }
 
@@ -488,29 +529,41 @@ function onZoom(){
 }
 function updZoomLbl(){
     const v=parseFloat(zoomSlider.value);
-    zoomLabel.textContent=v>=10?Math.round(v)+'×':v.toFixed(1)+'×';
+    
+    const arcFill = document.querySelector('.arc-fill');
+    const arcThumbGrp = document.querySelector('.arc-thumb-grp');
+    const zoomSvgLabel = document.getElementById('zoomSvgLabel');
+    
+    if(zoomSvgLabel) {
+        zoomSvgLabel.textContent = v>=10?Math.round(v)+'×':v.toFixed(1)+'×';
+    }
     
     // Update SVG arc if present
     const min = parseFloat(zoomSlider.min) || 1;
     const max = parseFloat(zoomSlider.max) || 10;
     const percent = (v - min) / (max - min || 1);
     
-    const arcFill = document.querySelector('.arc-fill');
-    const arcThumb = document.querySelector('.arc-thumb');
-    
-    if(arcFill && arcThumb) {
-        const pathLen = 135; // approx length of M 36 10 Q 4 75 36 140
+    if(arcFill && arcThumbGrp) {
+        const pathLen = 135; // approx length of M 36 140 Q 4 75 36 10
         const dashVal = percent * pathLen;
         arcFill.style.strokeDasharray = `${dashVal} ${pathLen}`;
         
-        // Quadratic Bezier: P(t) = (1-t)^2*P0 + 2*(1-t)*t*P1 + t^2*P2
-        // t = percent. P0 = (36, 140), P1 = (4, 75), P2 = (36, 10)
+        // Quadratic Bezier: P0 = (36, 140), P1 = (4, 75), P2 = (36, 10)
         const t = percent;
         const y = Math.pow(1-t, 2)*140 + 2*(1-t)*t*75 + Math.pow(t, 2)*10;
         const x = Math.pow(1-t, 2)*36 + 2*(1-t)*t*4 + Math.pow(t, 2)*36;
         
-        arcThumb.setAttribute('cx', x);
-        arcThumb.setAttribute('cy', y);
+        // Tangent angle
+        const dx = 2*(1-t)*(4 - 36) + 2*t*(36 - 4);
+        const dy = 2*(1-t)*(75 - 140) + 2*t*(10 - 75);
+        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+        
+        arcThumbGrp.style.transform = `translate(${x}px, ${y}px) rotate(${angle + 90}deg)`;
+        
+        if(zoomSvgLabel) {
+            zoomSvgLabel.setAttribute('x', x + 10);
+            zoomSvgLabel.setAttribute('y', y);
+        }
     }
 
     // Sync bottom buttons
