@@ -48,29 +48,33 @@
 
     <!-- ═══ Right side: control buttons ═══ -->
     <div class="side-panel right-panel" id="rightPanel">
-        <button class="ctrl-btn" id="powerBtn" title="الكاميرا">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                <circle cx="12" cy="13" r="4"/>
-            </svg>
-        </button>
-        <button class="ctrl-btn" id="freezeBtn" disabled title="تجميد">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="6" y="4" width="4" height="16" rx="1"/>
-                <rect x="14" y="4" width="4" height="16" rx="1"/>
-            </svg>
-        </button>
-        <button class="ctrl-btn" id="torchBtn" disabled title="الفلاش">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-            </svg>
-        </button>
+        <div class="ctrl-group">
+            <button class="ctrl-btn" id="powerBtn" title="الكاميرا">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                </svg>
+            </button>
+            <button class="ctrl-btn" id="freezeBtn" disabled title="تجميد">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="6" y="4" width="4" height="16" rx="1"/>
+                    <rect x="14" y="4" width="4" height="16" rx="1"/>
+                </svg>
+            </button>
+            <button class="ctrl-btn" id="torchBtn" disabled title="الفلاش">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+            </button>
+        </div>
     </div>
 
     <!-- ═══ Left side: zoom ═══ -->
     <div class="side-panel left-panel" id="leftPanel">
-        <span class="zoom-val" id="zoomLabel">1×</span>
-        <input type="range" class="zoom-range" id="zoomSlider" min="1" max="10" step="0.1" value="1" orient="vertical" disabled>
+        <div class="zoom-group">
+            <span class="zoom-val" id="zoomLabel">1×</span>
+            <input type="range" class="zoom-range" id="zoomSlider" min="1" max="10" step="0.1" value="1" orient="vertical" disabled>
+        </div>
     </div>
 
     <!-- ═══ Bottom bar: lens + info ═══ -->
@@ -144,6 +148,7 @@
                 <div class="setting-options" id="qualityOptions">
                     <button class="opt-btn" data-val="720">720p</button>
                     <button class="opt-btn active" data-val="1080">1080p</button>
+                    <button class="opt-btn" data-val="1440">2K</button>
                     <button class="opt-btn" data-val="max">أعلى دقة</button>
                 </div>
             </div>

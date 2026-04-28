@@ -296,6 +296,8 @@ async function startCam(){
         let targetWidth = 1920, targetHeight = 1080;
         if(recSettings.quality === '720') {
             targetWidth = 1280; targetHeight = 720;
+        } else if(recSettings.quality === '1440') {
+            targetWidth = 2560; targetHeight = 1440;
         } else if(recSettings.quality === 'max') {
             targetWidth = 9999; targetHeight = 9999;
         }
