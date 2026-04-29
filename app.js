@@ -483,22 +483,72 @@ async function startCam(){
 
         const targetFps = recSettings.fps || 30;
 
-        const c = {
-            video:{
-                width:{ideal:targetWidth}, 
-                height:{ideal:targetHeight}, 
-                frameRate:{ideal:targetFps, min:Math.min(24, targetFps)}
-            },
-            audio:false
+        // Build a video-constraints object for a given resolution + fps strategy
+        // strategy: 'strict' (force fps via min), 'ideal' (best-effort)
+        const buildVideo = (w, h, fps, strategy) => {
+            const v = {};
+            if(w && w !== 9999) {
+                v.width = { ideal: w };
+                v.height = { ideal: h };
+            }
+            if(strategy === 'strict') {
+                // Force at least (fps - 5) — browser must honor or throw OverconstrainedError
+                v.frameRate = { min: Math.max(fps - 5, 24), ideal: fps };
+            } else {
+                v.frameRate = { ideal: fps, min: Math.min(24, fps) };
+            }
+            if(allCameras.length > 0) {
+                v.deviceId = { exact: allCameras[currentCamIndex].deviceId };
+            } else {
+                v.facingMode = { ideal: 'environment' };
+            }
+            return v;
         };
-        
-        if (allCameras.length > 0) {
-            c.video.deviceId = { exact: allCameras[currentCamIndex].deviceId };
+
+        // Build progressive fallback list.
+        // For 60fps: prioritize keeping the framerate over keeping the resolution,
+        // since some phones (Honor, Huawei, mid-range Android) only support 60fps
+        // at lower resolutions. Without this, the browser silently drops to 30fps.
+        const attempts = [];
+        if(targetFps >= 60) {
+            // 1) Try as requested with strict fps
+            attempts.push({ video: buildVideo(targetWidth, targetHeight, targetFps, 'strict'), label: `${targetWidth}×${targetHeight}@${targetFps}` });
+            // 2) Drop from "max"/2K to 1080p with strict fps
+            if(targetWidth > 1920 || targetWidth === 9999) {
+                attempts.push({ video: buildVideo(1920, 1080, targetFps, 'strict'), label: `1920×1080@${targetFps}` });
+            }
+            // 3) Drop to 720p with strict fps (Honor + most mid-range support 720p@60)
+            if(targetWidth > 1280 || targetWidth === 9999) {
+                attempts.push({ video: buildVideo(1280, 720, targetFps, 'strict'), label: `1280×720@${targetFps}` });
+            }
+            // 4) No resolution constraint, strict fps — let browser pick best res that supports 60
+            attempts.push({ video: buildVideo(0, 0, targetFps, 'strict'), label: `auto@${targetFps}` });
+            // 5) Last resort: original request with ideal-only fps (might end up at 30)
+            attempts.push({ video: buildVideo(targetWidth, targetHeight, targetFps, 'ideal'), label: `${targetWidth}×${targetHeight}@best-effort` });
         } else {
-            c.video.facingMode = { ideal: 'environment' };
+            // Normal fps: just request as-is, with one fallback dropping resolution constraints
+            attempts.push({ video: buildVideo(targetWidth, targetHeight, targetFps, 'ideal'), label: `${targetWidth}×${targetHeight}@${targetFps}` });
+            attempts.push({ video: buildVideo(0, 0, targetFps, 'ideal'), label: `auto@${targetFps}` });
         }
 
-        stream=await navigator.mediaDevices.getUserMedia(c);
+        let lastErr = null;
+        let attemptUsed = 0;
+        for(let i = 0; i < attempts.length; i++) {
+            try{
+                stream = await navigator.mediaDevices.getUserMedia({ video: attempts[i].video, audio: false });
+                attemptUsed = i;
+                break;
+            }catch(e){
+                lastErr = e;
+                // Don't keep retrying for permission/no-camera/in-use errors
+                if(e.name === 'NotAllowedError' || e.name === 'NotFoundError' || e.name === 'NotReadableError') {
+                    throw e;
+                }
+                // OverconstrainedError or others: try next attempt
+            }
+        }
+        if(!stream) throw lastErr || new Error('Failed to start camera');
+
         track=stream.getVideoTracks()[0];
         video.srcObject=stream;
         await video.play();
@@ -506,15 +556,23 @@ async function startCam(){
         const caps=track.getCapabilities?track.getCapabilities():{};
         torchSupported=!!caps.torch;
 
-        // Zoom
+        // Zoom (capped at 5× max regardless of camera capability)
         if(caps.zoom){
-            zoomSlider.min=caps.zoom.min||1;
-            zoomSlider.max=caps.zoom.max||1;
-            zoomSlider.step=(caps.zoom.max-caps.zoom.min)>20?.5:.1;
-            zoomSlider.value=track.getSettings().zoom||caps.zoom.min||1;
-            zoomSlider.disabled=false;
-            const zg=document.getElementById('zoomGroup');
+            const ZOOM_CAP = 5;
+            const camMin = caps.zoom.min || 1;
+            const camMax = Math.min(caps.zoom.max || 1, ZOOM_CAP);
+            zoomSlider.min = camMin;
+            zoomSlider.max = camMax;
+            zoomSlider.step = (camMax - camMin) > 4 ? 0.1 : 0.05;
+            const currentZoom = track.getSettings().zoom || camMin;
+            zoomSlider.value = Math.min(currentZoom, camMax);
+            zoomSlider.disabled = false;
+            const zg = document.getElementById('zoomGroup');
             if(zg) zg.classList.remove('disabled');
+            // If camera was at higher zoom than our cap, bring it down
+            if(currentZoom > camMax) {
+                try{ track.applyConstraints({advanced:[{zoom: camMax}]}); }catch(_){}
+            }
             updZoomLbl();
         }else{
             zoomSlider.disabled=true;
@@ -529,6 +587,15 @@ async function startCam(){
         resText.textContent=`${s.width||'?'}×${s.height||'?'} ${fps}fps`;
         const lbl=track.label||'';
         camText.textContent=lbl.length>22?lbl.substring(0,20)+'…':(lbl||'الكاميرا الخلفية');
+
+        // Smart feedback when actual differs from requested (especially for 60fps issue on Honor/Huawei)
+        if(recSettings.warnings !== 'off' && typeof fps === 'number') {
+            if(targetFps >= 60 && fps < 50) {
+                setTimeout(() => showWarning(`⚠ هذه الكاميرا لا تدعم ${targetFps}fps — تشغيل بـ ${fps}fps`), 600);
+            } else if(targetFps >= 60 && attemptUsed > 0 && s.width && s.width < targetWidth && targetWidth !== 9999) {
+                setTimeout(() => showWarning(`✓ ${s.width}×${s.height} @ ${fps}fps (خفض للحفاظ على ${targetFps}fps)`), 600);
+            }
+        }
 
         powerBtn.classList.add('c-on');
         freezeBtn.disabled=false;
