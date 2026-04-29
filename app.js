@@ -186,13 +186,22 @@ function init(){
         if(e.code==='KeyZ'&&(e.ctrlKey||e.metaKey)&&frozen){e.preventDefault(); undo();}
     });
 
+    // Suppress main-app gestures while the onboarding overlay is open,
+    // so practice gestures don't accidentally toggle the real UI.
+    function welcomeOpen(){
+        const o = document.getElementById('welcomeOverlay');
+        return !!(o && o.classList.contains('on'));
+    }
+
     // Double-tap
     let lastTap=0;
     let wasMultiTouch=false;
     document.addEventListener('touchstart', e=>{
+        if(welcomeOpen()) return;
         if(e.touches.length > 1) wasMultiTouch=true;
     }, {passive: true});
     document.addEventListener('touchend', e=>{
+        if(welcomeOpen()) return;
         if(e.touches.length > 0) return;
         if(wasMultiTouch){ wasMultiTouch=false; return; }
         if(frozen && (e.target===drawCanvas || drawBar.contains(e.target))) return;
@@ -212,6 +221,7 @@ function init(){
     let fzPinchCenter = {x:0, y:0};
 
     document.addEventListener('touchstart', e => {
+        if(welcomeOpen()) return;
         if(e.touches.length === 2) {
             if(!frozen) {
                 if(!zoomSlider.disabled) {
@@ -238,6 +248,7 @@ function init(){
     }, {passive: false});
 
     document.addEventListener('touchmove', e => {
+        if(welcomeOpen()) return;
         if(e.touches.length === 2) {
             e.preventDefault(); 
             let currentY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
@@ -396,46 +407,192 @@ function setupCameraRecovery(){
 // ═══════════════════════════
 function initWelcome(){
     if(localStorage.getItem('cleanlens_welcomed')) return;
-    
+
     const overlay = document.getElementById('welcomeOverlay');
-    const slides = document.querySelectorAll('.welcome-slide');
-    const dots = document.querySelectorAll('.welcome-dots .dot');
+    const slides  = document.querySelectorAll('.welcome-slide');
+    const dots    = document.querySelectorAll('.welcome-dots .dot');
     const nextBtn = document.getElementById('welcomeNext');
     const skipBtn = document.getElementById('welcomeSkip');
     let current = 0;
-    
+
     overlay.classList.add('on');
-    
+
+    // ── Slide 2: gesture practice state ──
+    const gestureProgress = [false, false, false]; // [swipeDown, swipeUp, doubleTap]
+
+    function vibe(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(_){} }
+
+    function updateGestureUI(){
+        const tasks = document.querySelectorAll('#gestureTasks .gesture-task');
+        let activeSet = false;
+        tasks.forEach((task, i) => {
+            task.classList.toggle('done', gestureProgress[i]);
+            if(!gestureProgress[i] && !activeSet){
+                task.classList.add('active');
+                activeSet = true;
+            } else {
+                task.classList.remove('active');
+            }
+        });
+        const hint = document.getElementById('gestureHint');
+        if(hint){
+            const allDone = gestureProgress.every(Boolean);
+            hint.textContent = allDone ? '✓ ممتاز! جرّبت كل الإيماءات' : 'جرّب على الشاشة في أي مكان';
+            hint.style.color = allDone ? 'var(--neon-green)' : '';
+        }
+    }
+    function markGesture(idx){
+        if(gestureProgress[idx]) return;
+        gestureProgress[idx] = true;
+        updateGestureUI();
+        vibe(45);
+    }
+    updateGestureUI();
+
+    // Two-finger swipe + double-tap detection (only on slide 2)
+    let gStartY = 0, gStartX = 0, gFired = false, gLastTap = 0;
+
+    overlay.addEventListener('touchstart', (e) => {
+        if(current !== 1) return;
+        // Ignore taps on buttons (so clicking next/skip doesn't count as double-tap)
+        if(e.target.closest && e.target.closest('button, .prac-color')) return;
+
+        if(e.touches.length === 2){
+            gStartY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            gStartX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            gFired = false;
+        } else if(e.touches.length === 1){
+            const now = Date.now();
+            if(now - gLastTap < 300) markGesture(2);
+            gLastTap = now;
+        }
+    }, {passive: true});
+
+    overlay.addEventListener('touchmove', (e) => {
+        if(current !== 1 || gFired) return;
+        if(e.touches.length === 2){
+            const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            if(Math.abs(cx - gStartX) < 100){
+                if(cy - gStartY > 80){ markGesture(0); gFired = true; }
+                else if(gStartY - cy > 80){ markGesture(1); gFired = true; }
+            }
+        }
+    }, {passive: true});
+
+    // Desktop fallback: clicking a task marks it done
+    document.querySelectorAll('#gestureTasks .gesture-task').forEach((task, i) => {
+        task.addEventListener('click', () => {
+            if(current === 1) markGesture(i);
+        });
+    });
+
+    // ── Slide 3: drawing practice ──
+    const practiceCanvas = document.getElementById('practiceCanvas');
+    let pSized = false, pColor = '#ff3b30', pDrawing = false, pCtx = null;
+
+    function pSize(){
+        if(!practiceCanvas || pSized) return;
+        const rect = practiceCanvas.getBoundingClientRect();
+        if(rect.width === 0) return; // not visible yet
+        const dpr = window.devicePixelRatio || 1;
+        practiceCanvas.width  = rect.width  * dpr;
+        practiceCanvas.height = rect.height * dpr;
+        pCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        pSized = true;
+    }
+    function pXY(clientX, clientY){
+        const rect = practiceCanvas.getBoundingClientRect();
+        return { x: clientX - rect.left, y: clientY - rect.top };
+    }
+    function pStart(clientX, clientY){
+        pSize();
+        if(!pCtx) return;
+        pDrawing = true;
+        const p = pXY(clientX, clientY);
+        pCtx.strokeStyle = pColor;
+        pCtx.fillStyle   = pColor;
+        pCtx.lineWidth   = 4;
+        pCtx.lineCap     = 'round';
+        pCtx.lineJoin    = 'round';
+        // dot for single-tap
+        pCtx.beginPath();
+        pCtx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+        pCtx.fill();
+        // start path
+        pCtx.beginPath();
+        pCtx.moveTo(p.x, p.y);
+    }
+    function pMove(clientX, clientY){
+        if(!pDrawing || !pCtx) return;
+        const p = pXY(clientX, clientY);
+        pCtx.lineTo(p.x, p.y);
+        pCtx.stroke();
+    }
+    function pEnd(){ pDrawing = false; }
+
+    if(practiceCanvas){
+        pCtx = practiceCanvas.getContext('2d');
+        practiceCanvas.addEventListener('mousedown',  e => pStart(e.clientX, e.clientY));
+        practiceCanvas.addEventListener('mousemove',  e => pMove(e.clientX, e.clientY));
+        practiceCanvas.addEventListener('mouseup',    pEnd);
+        practiceCanvas.addEventListener('mouseleave', pEnd);
+        practiceCanvas.addEventListener('touchstart', e => {
+            e.preventDefault();
+            if(e.touches.length) pStart(e.touches[0].clientX, e.touches[0].clientY);
+        }, {passive: false});
+        practiceCanvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if(e.touches.length) pMove(e.touches[0].clientX, e.touches[0].clientY);
+        }, {passive: false});
+        practiceCanvas.addEventListener('touchend',    pEnd);
+        practiceCanvas.addEventListener('touchcancel', pEnd);
+
+        document.querySelectorAll('.prac-color').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.prac-color').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                pColor = btn.dataset.color;
+            });
+        });
+        const clearBtn = document.getElementById('practiceClear');
+        if(clearBtn) clearBtn.addEventListener('click', () => {
+            if(!pCtx) return;
+            const dpr = window.devicePixelRatio || 1;
+            pCtx.setTransform(1, 0, 0, 1, 0, 0);
+            pCtx.clearRect(0, 0, practiceCanvas.width, practiceCanvas.height);
+            pCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        });
+    }
+
+    // ── Navigation ──
     function goTo(idx){
         slides[current].classList.remove('active');
         dots[current].classList.remove('active');
         current = idx;
-        slides[current].classList.remove('active');
-        // Force reflow for animation
-        void slides[current].offsetWidth;
+        void slides[current].offsetWidth; // force reflow for animation
         slides[current].classList.add('active');
         dots[current].classList.add('active');
-        
-        if(current === slides.length - 1){
-            nextBtn.textContent = 'ابدأ';
-        } else {
-            nextBtn.textContent = 'التالي';
+
+        // Size the practice canvas the moment its slide becomes visible
+        if(current === 2 && practiceCanvas){
+            pSized = false;
+            // Two RAFs: ensure layout has settled after display:flex toggle
+            requestAnimationFrame(() => requestAnimationFrame(pSize));
         }
+
+        nextBtn.textContent = (current === slides.length - 1) ? 'ابدأ' : 'التالي';
     }
-    
+
     function closeWelcome(){
         overlay.classList.remove('on');
         localStorage.setItem('cleanlens_welcomed', '1');
     }
-    
-    nextBtn.addEventListener('click', ()=>{
-        if(current < slides.length - 1){
-            goTo(current + 1);
-        } else {
-            closeWelcome();
-        }
+
+    nextBtn.addEventListener('click', () => {
+        if(current < slides.length - 1) goTo(current + 1);
+        else closeWelcome();
     });
-    
     skipBtn.addEventListener('click', closeWelcome);
 }
 

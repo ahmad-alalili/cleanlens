@@ -226,24 +226,103 @@
         <span id="warningText">أعلى دقة قد ترفع حرارة الجهاز</span>
     </div>
 
-    <!-- ═══ Welcome Onboarding (first time only) ═══ -->
+    <!-- ═══ Welcome Onboarding (interactive, first time only) ═══ -->
     <div class="welcome-overlay" id="welcomeOverlay">
         <div class="welcome-box">
             <div class="welcome-slides" id="welcomeSlides">
+                <!-- Slide 1: Animated welcome -->
                 <div class="welcome-slide active">
-                    <div class="slide-icon">📷</div>
+                    <div class="hero-orb">
+                        <svg viewBox="0 0 90 90" class="hero-camera">
+                            <defs>
+                                <linearGradient id="orbGrad" x1="0" y1="0" x2="1" y2="1">
+                                    <stop offset="0" stop-color="#ffb703"/>
+                                    <stop offset="1" stop-color="#a0c4ff"/>
+                                </linearGradient>
+                            </defs>
+                            <circle cx="45" cy="45" r="40" fill="none" stroke="url(#orbGrad)" stroke-width="1.5" stroke-dasharray="4 6" class="orb-ring"/>
+                            <circle cx="45" cy="45" r="28" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
+                            <circle cx="45" cy="45" r="18" fill="rgba(255,183,3,0.12)" stroke="#ffb703" stroke-width="2"/>
+                            <circle cx="45" cy="45" r="9" fill="#ffb703" class="orb-pulse"/>
+                            <circle cx="58" cy="32" r="2.5" fill="rgba(255,255,255,0.7)"/>
+                        </svg>
+                    </div>
                     <h2>مرحباً بك في CleanLens</h2>
-                    <p>تطبيق كاميرا متقدم مع فلاش وتجميد ورسم</p>
+                    <p>كاميرا ذكية مع تجميد ورسم وإيماءات سريعة</p>
                 </div>
+
+                <!-- Slide 2: Interactive gesture practice -->
                 <div class="welcome-slide">
-                    <div class="slide-icon">✨</div>
-                    <h2>الإيماءات</h2>
-                    <p>اسحب بإصبعين للأسفل للفلاش، وللأعلى للتجميد، وانقر مرتين لإخفاء الواجهة</p>
+                    <h2>جرّب الإيماءات</h2>
+                    <div class="gesture-tasks" id="gestureTasks">
+                        <div class="gesture-task" data-gesture="0">
+                            <div class="g-icon">
+                                <svg viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M14 8 L14 26 M22 8 L22 26"/>
+                                    <polyline points="10 22 14 26 18 22"/>
+                                    <polyline points="18 22 22 26 26 22"/>
+                                </svg>
+                            </div>
+                            <div class="g-text">
+                                <div class="g-name">اسحب بإصبعين للأسفل</div>
+                                <div class="g-purpose">لتشغيل الفلاش</div>
+                            </div>
+                            <div class="g-check">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12 10 17 19 7"/></svg>
+                            </div>
+                        </div>
+                        <div class="gesture-task" data-gesture="1">
+                            <div class="g-icon">
+                                <svg viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M14 28 L14 10 M22 28 L22 10"/>
+                                    <polyline points="10 14 14 10 18 14"/>
+                                    <polyline points="18 14 22 10 26 14"/>
+                                </svg>
+                            </div>
+                            <div class="g-text">
+                                <div class="g-name">اسحب بإصبعين للأعلى</div>
+                                <div class="g-purpose">لتجميد الصورة</div>
+                            </div>
+                            <div class="g-check">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12 10 17 19 7"/></svg>
+                            </div>
+                        </div>
+                        <div class="gesture-task" data-gesture="2">
+                            <div class="g-icon">
+                                <svg viewBox="0 0 36 36" fill="none">
+                                    <circle cx="18" cy="18" r="4" fill="currentColor"/>
+                                    <circle cx="18" cy="18" r="9" stroke="currentColor" stroke-width="1.5" fill="none" opacity="0.5"/>
+                                    <circle cx="18" cy="18" r="14" stroke="currentColor" stroke-width="1.5" fill="none" opacity="0.25"/>
+                                </svg>
+                            </div>
+                            <div class="g-text">
+                                <div class="g-name">انقر مرتين بسرعة</div>
+                                <div class="g-purpose">لإخفاء الواجهة</div>
+                            </div>
+                            <div class="g-check">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12 10 17 19 7"/></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="gesture-hint" id="gestureHint">جرّب على الشاشة في أي مكان</p>
                 </div>
+
+                <!-- Slide 3: Interactive drawing practice -->
                 <div class="welcome-slide">
-                    <div class="slide-icon">✏️</div>
-                    <h2>ارسم على الصورة</h2>
-                    <p>عند تجميد الصورة، ارسم بإصبع واحد وكبّر بإصبعين</p>
+                    <h2>ارسم بإصبعك</h2>
+                    <canvas class="practice-canvas" id="practiceCanvas"></canvas>
+                    <div class="practice-tools">
+                        <div class="practice-colors">
+                            <button class="prac-color active" data-color="#ff3b30" style="background:#ff3b30" aria-label="أحمر"></button>
+                            <button class="prac-color" data-color="#fbbf24" style="background:#fbbf24" aria-label="أصفر"></button>
+                            <button class="prac-color" data-color="#34d399" style="background:#34d399" aria-label="أخضر"></button>
+                            <button class="prac-color" data-color="#3b82f6" style="background:#3b82f6" aria-label="أزرق"></button>
+                            <button class="prac-color" data-color="#ffffff" style="background:#ffffff" aria-label="أبيض"></button>
+                        </div>
+                        <button class="practice-clear" id="practiceClear" title="مسح">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                    </div>
                 </div>
             </div>
             <div class="welcome-dots" id="welcomeDots">
