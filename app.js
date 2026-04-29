@@ -339,8 +339,56 @@ function init(){
     drawCanvas.addEventListener('touchcancel', onDrawEnd);
 
     checkFS();
+    setupCameraRecovery();
     startCam();
     initWelcome();
+}
+
+// ═══════════════════════════
+//  CAMERA AUTO-RECOVERY
+// ═══════════════════════════
+// When the tab is backgrounded, the OS may kill the camera track or stall the
+// video element. On return, the user used to see a frozen feed and have to
+// power-cycle the camera. This auto-recovers silently.
+let recovering = false;
+
+async function recoverCameraIfNeeded(){
+    if(recovering || !stream) return;
+    const trackDead = !track || track.readyState === 'ended';
+    const videoStuck = !frozen && (video.paused || video.readyState < 2);
+
+    if(trackDead){
+        recovering = true;
+        if(frozen) unfreeze();
+        stopCam();
+        try{ await startCam(); }catch(_){}
+        recovering = false;
+    } else if(videoStuck){
+        // Try the cheap fix first: just resume playback
+        try{
+            await video.play();
+        }catch(_){
+            // Resume failed — full restart
+            recovering = true;
+            stopCam();
+            try{ await startCam(); }catch(_){}
+            recovering = false;
+        }
+    }
+}
+
+function setupCameraRecovery(){
+    document.addEventListener('visibilitychange', () => {
+        if(document.visibilityState === 'visible') recoverCameraIfNeeded();
+    });
+    // iOS Safari: pageshow fires when restoring from back-forward cache
+    window.addEventListener('pageshow', (e) => {
+        if(e.persisted) recoverCameraIfNeeded();
+    });
+    // Some browsers fire 'focus' on the window when returning from another app
+    window.addEventListener('focus', () => {
+        if(document.visibilityState === 'visible') recoverCameraIfNeeded();
+    });
 }
 
 // ═══════════════════════════
@@ -484,7 +532,8 @@ async function startCam(){
         const targetFps = recSettings.fps || 30;
 
         // Build a video-constraints object for a given resolution + fps strategy
-        // strategy: 'strict' (force fps via min), 'ideal' (best-effort)
+        // strategy: 'strict' (force fps via min — fails if camera can't deliver),
+        //          'ideal'  (best-effort — accept whatever the camera gives)
         const buildVideo = (w, h, fps, strategy) => {
             const v = {};
             if(w && w !== 9999) {
@@ -492,7 +541,6 @@ async function startCam(){
                 v.height = { ideal: h };
             }
             if(strategy === 'strict') {
-                // Force at least (fps - 5) — browser must honor or throw OverconstrainedError
                 v.frameRate = { min: Math.max(fps - 5, 24), ideal: fps };
             } else {
                 v.frameRate = { ideal: fps, min: Math.min(24, fps) };
@@ -505,51 +553,47 @@ async function startCam(){
             return v;
         };
 
-        // Build progressive fallback list.
-        // For 60fps: prioritize keeping the framerate over keeping the resolution,
-        // since some phones (Honor, Huawei, mid-range Android) only support 60fps
-        // at lower resolutions. Without this, the browser silently drops to 30fps.
+        // "If possible" strategy: keep the user's chosen resolution.
+        // - First try to force the requested fps at that resolution (strict).
+        // - If the camera can't deliver, fall back to best-effort fps at the SAME resolution.
+        //   The user gets their resolution; the achieved fps is whatever the camera can provide.
+        // No resolution downgrade is ever performed.
         const attempts = [];
         if(targetFps >= 60) {
-            // 1) Try as requested with strict fps
-            attempts.push({ video: buildVideo(targetWidth, targetHeight, targetFps, 'strict'), label: `${targetWidth}×${targetHeight}@${targetFps}` });
-            // 2) Drop from "max"/2K to 1080p with strict fps
-            if(targetWidth > 1920 || targetWidth === 9999) {
-                attempts.push({ video: buildVideo(1920, 1080, targetFps, 'strict'), label: `1920×1080@${targetFps}` });
-            }
-            // 3) Drop to 720p with strict fps (Honor + most mid-range support 720p@60)
-            if(targetWidth > 1280 || targetWidth === 9999) {
-                attempts.push({ video: buildVideo(1280, 720, targetFps, 'strict'), label: `1280×720@${targetFps}` });
-            }
-            // 4) No resolution constraint, strict fps — let browser pick best res that supports 60
-            attempts.push({ video: buildVideo(0, 0, targetFps, 'strict'), label: `auto@${targetFps}` });
-            // 5) Last resort: original request with ideal-only fps (might end up at 30)
-            attempts.push({ video: buildVideo(targetWidth, targetHeight, targetFps, 'ideal'), label: `${targetWidth}×${targetHeight}@best-effort` });
+            attempts.push({ video: buildVideo(targetWidth, targetHeight, targetFps, 'strict') });
+            attempts.push({ video: buildVideo(targetWidth, targetHeight, targetFps, 'ideal') });
         } else {
-            // Normal fps: just request as-is, with one fallback dropping resolution constraints
-            attempts.push({ video: buildVideo(targetWidth, targetHeight, targetFps, 'ideal'), label: `${targetWidth}×${targetHeight}@${targetFps}` });
-            attempts.push({ video: buildVideo(0, 0, targetFps, 'ideal'), label: `auto@${targetFps}` });
+            attempts.push({ video: buildVideo(targetWidth, targetHeight, targetFps, 'ideal') });
         }
 
         let lastErr = null;
-        let attemptUsed = 0;
         for(let i = 0; i < attempts.length; i++) {
             try{
                 stream = await navigator.mediaDevices.getUserMedia({ video: attempts[i].video, audio: false });
-                attemptUsed = i;
                 break;
             }catch(e){
                 lastErr = e;
-                // Don't keep retrying for permission/no-camera/in-use errors
                 if(e.name === 'NotAllowedError' || e.name === 'NotFoundError' || e.name === 'NotReadableError') {
                     throw e;
                 }
-                // OverconstrainedError or others: try next attempt
             }
         }
         if(!stream) throw lastErr || new Error('Failed to start camera');
 
         track=stream.getVideoTracks()[0];
+
+        // If the OS or another app kills the track (common when backgrounding,
+        // taking a phone call, or low-memory pressure), auto-recover.
+        track.addEventListener('ended', () => {
+            // stopCam() sets stream=null before this event reaches us, so the
+            // guard naturally skips intentional shutdowns.
+            if(!stream) return;
+            if(document.visibilityState === 'visible'){
+                recoverCameraIfNeeded();
+            }
+            // If hidden, recovery happens when the user returns (visibilitychange)
+        });
+
         video.srcObject=stream;
         await video.play();
 
@@ -587,15 +631,6 @@ async function startCam(){
         resText.textContent=`${s.width||'?'}×${s.height||'?'} ${fps}fps`;
         const lbl=track.label||'';
         camText.textContent=lbl.length>22?lbl.substring(0,20)+'…':(lbl||'الكاميرا الخلفية');
-
-        // Smart feedback when actual differs from requested (especially for 60fps issue on Honor/Huawei)
-        if(recSettings.warnings !== 'off' && typeof fps === 'number') {
-            if(targetFps >= 60 && fps < 50) {
-                setTimeout(() => showWarning(`⚠ هذه الكاميرا لا تدعم ${targetFps}fps — تشغيل بـ ${fps}fps`), 600);
-            } else if(targetFps >= 60 && attemptUsed > 0 && s.width && s.width < targetWidth && targetWidth !== 9999) {
-                setTimeout(() => showWarning(`✓ ${s.width}×${s.height} @ ${fps}fps (خفض للحفاظ على ${targetFps}fps)`), 600);
-            }
-        }
 
         powerBtn.classList.add('c-on');
         freezeBtn.disabled=false;
