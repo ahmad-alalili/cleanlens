@@ -97,22 +97,50 @@ function init(){
         }
     });
     
-    // Add touch dragging to zoom arc SVG
-    const arcContainer = document.querySelector('.zoom-arc');
-    if(arcContainer) {
-        arcContainer.addEventListener('touchmove', (e) => {
+    // Vertical zoom track — supports touch drag, mouse drag, and tap-to-jump
+    const zoomTrack = document.getElementById('zoomTrack');
+    if(zoomTrack) {
+        let zoomDragging = false;
+
+        function setZoomFromY(clientY) {
             if(zoomSlider.disabled) return;
-            e.preventDefault();
-            const rect = arcContainer.getBoundingClientRect();
-            let y = e.touches[0].clientY - rect.top;
+            const rect = zoomTrack.getBoundingClientRect();
+            let y = clientY - rect.top;
             y = Math.max(0, Math.min(y, rect.height));
-            // y=150 is min zoom, y=0 is max zoom
+            // Top of track = max zoom, bottom = min zoom
             const percent = 1 - (y / rect.height);
             const min = parseFloat(zoomSlider.min) || 1;
             const max = parseFloat(zoomSlider.max) || 10;
             zoomSlider.value = min + percent * (max - min);
             onZoom();
+        }
+
+        // Touch
+        zoomTrack.addEventListener('touchstart', (e) => {
+            if(zoomSlider.disabled) return;
+            e.preventDefault();
+            zoomDragging = true;
+            setZoomFromY(e.touches[0].clientY);
         }, {passive: false});
+        zoomTrack.addEventListener('touchmove', (e) => {
+            if(!zoomDragging || zoomSlider.disabled) return;
+            e.preventDefault();
+            setZoomFromY(e.touches[0].clientY);
+        }, {passive: false});
+        zoomTrack.addEventListener('touchend', () => { zoomDragging = false; });
+        zoomTrack.addEventListener('touchcancel', () => { zoomDragging = false; });
+
+        // Mouse (desktop)
+        zoomTrack.addEventListener('mousedown', (e) => {
+            if(zoomSlider.disabled) return;
+            zoomDragging = true;
+            setZoomFromY(e.clientY);
+        });
+        document.addEventListener('mousemove', (e) => {
+            if(!zoomDragging) return;
+            setZoomFromY(e.clientY);
+        });
+        document.addEventListener('mouseup', () => { zoomDragging = false; });
     }
 
     zoomSlider.addEventListener('input', onZoom);
@@ -366,58 +394,73 @@ function initWelcome(){
 // ═══════════════════════════
 //  CAMERA
 // ═══════════════════════════
+function smartCamLabel(cam, index, allBack){
+    const label = (cam.label || '').toLowerCase();
+    if(/front|user|أمام/.test(label)) return 'أمامية';
+    if(/ultra.?wide|0\.5|0,5/.test(label)) return 'واسعة';
+    if(/tele|zoom|مقرب/.test(label)) return 'تقريب';
+    if(/wide/.test(label) && !/ultra/.test(label)) return 'أساسية';
+    if(/back|environment|خلف/.test(label)) {
+        return allBack && allBack.length > 1
+            ? 'خلفية ' + (allBack.indexOf(cam) + 1)
+            : 'خلفية';
+    }
+    return index === 0 ? 'أساسية' : 'عدسة ' + (index + 1);
+}
+
 async function enumCams(){
     try{
-        const d=await navigator.mediaDevices.enumerateDevices();
-        allCameras=d.filter(x=>x.kind==='videoinput');
-        if (allCameras.length > 1) {
-            switchCamBtn.disabled = false;
-        } else {
-            switchCamBtn.disabled = true;
+        const d = await navigator.mediaDevices.enumerateDevices();
+        allCameras = d.filter(x => x.kind === 'videoinput');
+
+        // Sync currentCamIndex with the actually active deviceId
+        if(track){
+            const settings = track.getSettings();
+            const activeId = settings.deviceId;
+            if(activeId){
+                const idx = allCameras.findIndex(c => c.deviceId === activeId);
+                if(idx >= 0) currentCamIndex = idx;
+            }
         }
-        
-        // Populate physical lens row
+
+        switchCamBtn.disabled = allCameras.length <= 1;
+
         const row = document.getElementById('physicalLensRow');
-        if(row && allCameras.length > 1) {
-            row.style.display = 'flex';
-            row.innerHTML = '';
-            
-            // Try to filter to back cameras, if none, use all
-            let backCams = allCameras.filter(c => c.facingMode === 'environment' || /back|env|خلفي/i.test(c.label));
-            if(backCams.length === 0) backCams = allCameras;
-            
-            backCams.forEach((cam, i) => {
-                const btn = document.createElement('button');
-                btn.className = 'cam-pill';
-                
-                let label = cam.label.toLowerCase();
-                let name = 'عدسة ' + (i+1);
-                if(label.includes('front') || label.includes('أمامي')) name = 'أمامية';
-                else if(label.includes('ultra') || label.includes('wide') || label.includes('0.5')) name = 'واسعة';
-                else if(label.includes('tele') || label.includes('zoom') || label.includes('مقرب')) name = 'تقريب';
-                else if(i === 0) name = 'أساسية';
-                
-                btn.textContent = name;
-                btn.onclick = async () => {
-                    if(!stream) return;
-                    currentCamIndex = allCameras.indexOf(cam);
-                    document.querySelectorAll('#physicalLensRow .cam-pill').forEach(p=>p.classList.remove('active'));
-                    btn.classList.add('active');
-                    if(frozen) unfreeze();
-                    stopCam();
-                    await startCam();
-                };
-                
-                // Set active state
-                if (allCameras[currentCamIndex].deviceId === cam.deviceId) {
-                    btn.classList.add('active');
-                }
-                
-                row.appendChild(btn);
-            });
-        } else if(row) {
+        if(!row) return;
+
+        // Hide row if there's only one camera
+        if(allCameras.length <= 1){
             row.style.display = 'none';
+            return;
         }
+
+        row.style.display = 'flex';
+
+        // Identify back-facing cameras for smarter naming
+        const backCams = allCameras.filter(c => /back|environment|خلف/i.test(c.label || ''));
+
+        // Build / update buttons in stable order
+        row.innerHTML = '';
+        allCameras.forEach((cam, i) => {
+            const btn = document.createElement('button');
+            btn.className = 'cam-pill';
+            btn.textContent = smartCamLabel(cam, i, backCams);
+            btn.dataset.deviceId = cam.deviceId;
+
+            if(i === currentCamIndex) btn.classList.add('active');
+
+            btn.addEventListener('click', async () => {
+                if(!stream || i === currentCamIndex) return;
+                currentCamIndex = i;
+                row.querySelectorAll('.cam-pill').forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                if(frozen) unfreeze();
+                stopCam();
+                await startCam();
+            });
+
+            row.appendChild(btn);
+        });
     }catch(_){}
 }
 
@@ -470,9 +513,15 @@ async function startCam(){
             zoomSlider.step=(caps.zoom.max-caps.zoom.min)>20?.5:.1;
             zoomSlider.value=track.getSettings().zoom||caps.zoom.min||1;
             zoomSlider.disabled=false;
+            const zg=document.getElementById('zoomGroup');
+            if(zg) zg.classList.remove('disabled');
             updZoomLbl();
         }else{
-            zoomSlider.disabled=true; zoomLabel.textContent='--';
+            zoomSlider.disabled=true;
+            const zg=document.getElementById('zoomGroup');
+            if(zg) zg.classList.add('disabled');
+            const zl=document.getElementById('zoomSvgLabel');
+            if(zl) zl.textContent='--';
         }
 
         const s=track.getSettings();
@@ -528,45 +577,24 @@ function onZoom(){
     }
 }
 function updZoomLbl(){
-    const v=parseFloat(zoomSlider.value);
-    
-    const arcFill = document.querySelector('.arc-fill');
-    const arcThumbGrp = document.querySelector('.arc-thumb-grp');
-    const zoomSvgLabel = document.getElementById('zoomSvgLabel');
-    
-    if(zoomSvgLabel) {
-        zoomSvgLabel.textContent = v>=10?Math.round(v)+'×':v.toFixed(1)+'×';
-    }
-    
-    // Update SVG arc if present
+    const v = parseFloat(zoomSlider.value);
     const min = parseFloat(zoomSlider.min) || 1;
     const max = parseFloat(zoomSlider.max) || 10;
     const percent = (v - min) / (max - min || 1);
-    
-    if(arcFill && arcThumbGrp) {
-        const pathLen = 135; // approx length of M 36 140 Q 4 75 36 10
-        const dashVal = percent * pathLen;
-        arcFill.style.strokeDasharray = `${dashVal} ${pathLen}`;
-        
-        // Quadratic Bezier: P0 = (36, 140), P1 = (4, 75), P2 = (36, 10)
-        const t = percent;
-        const y = Math.pow(1-t, 2)*140 + 2*(1-t)*t*75 + Math.pow(t, 2)*10;
-        const x = Math.pow(1-t, 2)*36 + 2*(1-t)*t*4 + Math.pow(t, 2)*36;
-        
-        // Tangent angle
-        const dx = 2*(1-t)*(4 - 36) + 2*t*(36 - 4);
-        const dy = 2*(1-t)*(75 - 140) + 2*t*(10 - 75);
-        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-        
-        arcThumbGrp.style.transform = `translate(${x}px, ${y}px) rotate(${angle + 90}deg)`;
-        
-        if(zoomSvgLabel) {
-            zoomSvgLabel.setAttribute('x', x + 10);
-            zoomSvgLabel.setAttribute('y', y);
-        }
+
+    const zoomSvgLabel = document.getElementById('zoomSvgLabel');
+    if(zoomSvgLabel) {
+        zoomSvgLabel.textContent = v >= 10 ? Math.round(v) + '×' : v.toFixed(1) + '×';
     }
 
-    // Sync bottom buttons
+    // Update vertical track fill + thumb
+    const fill = document.querySelector('.zoom-fill');
+    const thumb = document.querySelector('.zoom-thumb');
+    const pctStr = (percent * 100) + '%';
+    if(fill) fill.style.height = pctStr;
+    if(thumb) thumb.style.bottom = pctStr;
+
+    // Sync bottom buttons (1×, 2×, 3×, …)
     const roundedZoom = Math.round(v);
     document.querySelectorAll('#lensRow .lens-pill').forEach(btn => {
         const btnVal = parseFloat(btn.getAttribute('data-lens'));
@@ -599,7 +627,11 @@ function stopCam(){
     statusBadge.classList.remove('on');
     statusText.textContent='غير متصل';
     resText.textContent='--';camText.textContent='الكاميرا الخلفية';
-    zoomSlider.disabled=true;zoomLabel.textContent='--';
+    zoomSlider.disabled=true;
+    const zg=document.getElementById('zoomGroup');
+    if(zg) zg.classList.add('disabled');
+    const zl=document.getElementById('zoomSvgLabel');
+    if(zl) zl.textContent='--';
 }
 
 // ═══════════════════════════
